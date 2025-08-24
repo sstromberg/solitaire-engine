@@ -1,0 +1,322 @@
+import { GameRules } from '../core/GameRules.js';
+
+export class KlondikeRules extends GameRules {
+	constructor(deckConfig) {
+		super(deckConfig);
+	}
+
+	// Klondike-specific tableau pile count
+	getTableauPileCount() {
+		return 7; // Klondike always has 7 tableau piles
+	}
+
+	// Klondike-specific foundation pile count
+	getFoundationPileCount() {
+		return 4; // One for each suit
+	}
+
+	// Check if cards can be stacked on tableau (descending, alternating colors)
+	canStackCards(card, targetCard) {
+		console.log('KlondikeRules.canStackCards called with:', {
+			card: card ? card.getShortDisplay() : 'null',
+			targetCard: targetCard ? targetCard.getShortDisplay() : 'null'
+		});
+		
+		if (!targetCard || !targetCard.isFaceUp) {
+			console.log('Target card is null or face down, returning false');
+			return false;
+		}
+		
+		// In Klondike, cards stack in descending order with alternating colors
+		const isDescending = card.rank === targetCard.rank - 1;
+		const isAlternatingColor = this.getSuitColor(card) !== this.getSuitColor(targetCard);
+		
+		console.log('Stacking validation details:', {
+			cardRank: card.rank,
+			targetRank: targetCard.rank,
+			isDescending,
+			cardSuitColor: this.getSuitColor(card),
+			targetSuitColor: this.getSuitColor(targetCard),
+			isAlternatingColor
+		});
+		
+		const result = isDescending && isAlternatingColor;
+		console.log('canStackCards result:', result);
+		return result;
+	}
+
+	// Check if a card can be moved to a foundation pile
+	isValidFoundationMove(card, targetPile, gameState) {
+		console.log('KlondikeRules.isValidFoundationMove called with:', {
+			card: card ? card.getShortDisplay() : 'null',
+			targetPileType: targetPile.type,
+			targetPileIndex: targetPile.index
+		});
+		
+		if (targetPile.type !== 'foundation') {
+			console.log('Target pile is not foundation, returning false');
+			return false;
+		}
+
+		const topCard = targetPile.getTopCard();
+		console.log('Top card of foundation pile:', topCard ? topCard.getShortDisplay() : 'none');
+		
+		if (!topCard) {
+			// Empty foundation pile - only aces can be placed
+			const result = card.rank === 1;
+			console.log('Empty foundation pile, ace check result:', result);
+			return result;
+		}
+		
+		// Cards must be same suit and ascending order
+		const sameSuit = card.suit === topCard.suit;
+		const ascendingOrder = card.rank === topCard.rank + 1;
+		const result = sameSuit && ascendingOrder;
+		
+		console.log('Foundation move validation details:', {
+			sameSuit,
+			ascendingOrder,
+			result
+		});
+		
+		return result;
+	}
+
+	// Check if a card can be moved to a tableau pile
+	isValidTableauMove(card, targetPile, gameState) {
+		console.log('KlondikeRules.isValidTableauMove called with:', {
+			card: card ? card.getShortDisplay() : 'null',
+			targetPileType: targetPile.type,
+			targetPileIndex: targetPile.index
+		});
+		
+		if (targetPile.type !== 'tableau') {
+			console.log('Target pile is not tableau, returning false');
+			return false;
+		}
+
+		const topCard = targetPile.getTopCard();
+		console.log('Top card of tableau pile:', topCard ? topCard.getShortDisplay() : 'none');
+		
+		if (!topCard) {
+			// Empty tableau pile - only kings can be placed
+			const result = card.rank === 13;
+			console.log('Empty tableau pile, king check result:', result);
+			return result;
+		}
+		
+		// Cards must be descending order with alternating colors
+		const result = this.canStackCards(card, topCard);
+		console.log('Tableau move validation result:', result);
+		return result;
+	}
+
+	// Get all valid targets for a card
+	getValidTargets(card, gameState) {
+		const validTargets = [];
+		
+		// Check foundation piles
+		gameState.piles
+			.filter(pile => pile.type === 'foundation')
+			.forEach(pile => {
+				if (this.isValidFoundationMove(card, pile, gameState)) {
+					validTargets.push(pile);
+				}
+			});
+		
+		// Check tableau piles
+		gameState.piles
+			.filter(pile => pile.type === 'tableau')
+			.forEach(pile => {
+				if (this.isValidTableauMove(card, pile, gameState)) {
+					validTargets.push(pile);
+				}
+			});
+		
+		return validTargets;
+	}
+
+	// Check if the game is won
+	checkWinCondition(gameState) {
+		// Game is won when all foundation piles have 13 cards (A through K)
+		const foundationPiles = gameState.piles.filter(pile => pile.type === 'foundation');
+		
+		return foundationPiles.every(pile => pile.getCardCount() === 13);
+	}
+
+	// Get the initial deal configuration for Klondike
+	getInitialDeal() {
+		const deal = {
+			tableau: [], // Array of arrays, one for each tableau pile
+			stockPile: 24,   // 24 cards go to stock (52 - 28 tableau cards)
+			wastePile: 0     // Waste pile starts empty
+		};
+		
+		// Deal 7 cards to tableau piles
+		// Pile 1 gets 1 card, Pile 2 gets 2 cards, etc.
+		for (let i = 0; i < 7; i++) {
+			deal.tableau[i] = [];
+			for (let j = 0; j <= i; j++) {
+				deal.tableau[i].push({
+					faceUp: j === i, // Only top card is face up
+					position: { pile: 'tableau', index: i, cardIndex: j }
+				});
+			}
+		}
+		
+		return deal;
+	}
+
+	// Get the score for a move
+	getMoveScore(card, targetPile, gameState) {
+		if (targetPile.type === 'foundation') {
+			return 10; // Points for building foundation
+		} else if (targetPile.type === 'tableau') {
+			return 1;  // Points for tableau moves
+		}
+		return 0;
+	}
+
+	// Override pile configuration for Klondike
+	getPileConfiguration() {
+		return {
+			foundation: {
+				count: this.getFoundationPileCount(),
+				create: true
+			},
+			tableau: {
+				count: this.getTableauPileCount(),
+				create: true
+			},
+			stock: {
+				count: 1, // Klondike has 1 stock pile
+				create: true
+			},
+			waste: {
+				count: 1, // Klondike has 1 waste pile
+				create: true
+			},
+			freecell: {
+				count: 0, // Klondike has no free cell piles
+				create: false
+			}
+		};
+	}
+
+	// Override stock drawing rules for Klondike
+	getStockDrawingRules() {
+		return {
+			cardsPerDraw: 1, // Klondike draws 1 card at a time
+			redealWhenEmpty: true, // Klondike redeals waste to stock
+			shuffleOnRedeal: true, // Klondike shuffles on redeal
+			faceUpOnDraw: true, // Cards become face up when drawn
+			faceDownOnRedeal: true // Cards become face down when redealt
+		};
+	}
+
+	// Override card flipping rules for Klondike
+	getCardFlippingRules() {
+		return {
+			tableau: {
+				flipOnEmpty: false, // Don't flip when tableau becomes empty
+				flipOnMove: true, // Flip top card when cards are moved
+				flipCondition: 'faceDown' // Flip only face-down cards
+			},
+			foundation: {
+				flipOnEmpty: false,
+				flipOnMove: false,
+				flipCondition: 'never'
+			},
+			stock: {
+				flipOnEmpty: false,
+				flipOnMove: false,
+				flipCondition: 'never'
+			}
+		};
+	}
+
+	// Override stack movement rules for Klondike
+	canMoveStack(cards, targetPile, gameState) {
+		// Klondike: If the bottom card can be placed, the entire stack can move
+		// (The stack is already valid by definition - it wouldn't exist if it wasn't)
+		if (cards.length === 0) return false;
+		
+		const bottomCard = cards[0];
+		return this.isValidTableauMove(bottomCard, targetPile, gameState);
+	}
+
+	// Override scoring rules for Klondike
+	getScoringRules() {
+		return {
+			foundation: { points: 10, bonus: 0 }, // 10 points for building foundation
+			tableau: { points: 1, bonus: 0 },     // 1 point for tableau moves
+			freecell: { points: 0, bonus: 0 },    // No points for free cells
+			stock: { points: 0, bonus: 0 },       // No points for stock
+			waste: { points: 0, bonus: 0 }        // No points for waste
+		};
+	}
+
+	// Override win conditions for Klondike
+	getWinConditions() {
+		return [
+			{
+				type: 'foundationComplete',
+				pileType: 'foundation',
+				required: 'all',
+				cardsPerPile: 13, // Ace through King (13 cards)
+				description: 'All foundation piles must be complete (Ace to King)'
+			}
+		];
+	}
+
+	// Override deal pattern for Klondike
+	getDealPattern() {
+		return {
+			type: 'sequential',
+			piles: ['tableau', 'foundation', 'stock', 'waste'],
+			faceUp: [true, false, false, false],
+			distribution: 'custom',
+			tableau: {
+				piles: 7,
+				cardsPerPile: [1, 1, 1, 1, 1, 1, 1], // 1 card per pile initially
+				faceUp: [true, true, true, true, true, true, true] // All face up
+			},
+			foundation: {
+				piles: 4,
+				cardsPerPile: [0, 0, 0, 0], // No cards initially
+				faceUp: [false, false, false, false]
+			},
+			stock: {
+				piles: 1,
+				cardsPerPile: [24], // Remaining 24 cards
+				faceUp: [false] // Face down
+			},
+			waste: {
+				piles: 1,
+				cardsPerPile: [0], // No cards initially
+				faceUp: [false]
+			},
+			freecell: {
+				piles: 0,
+				cardsPerPile: [],
+				faceUp: []
+			}
+		};
+	}
+
+	// Get game-specific rules description
+	getRulesDescription() {
+		return `Klondike Solitaire Rules:
+		• Build foundation piles from Ace (1) to King (13) in the same suit
+		• Build tableau piles in descending order with alternating colors
+		• Only Kings can be placed on empty tableau piles
+		• Only Aces can start foundation piles
+		• Draw from stock to waste pile, can redeal waste to stock`;
+	}
+
+	// Helper method to get suit color
+	getSuitColor(card) {
+		const redSuits = ['hearts', 'diamonds'];
+		return redSuits.includes(card.suit) ? 'red' : 'black';
+	}
+}
