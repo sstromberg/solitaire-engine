@@ -130,13 +130,13 @@ Build a web-based solitaire game using **Svelte** that supports both classic Klo
 ## **Phase 6: Advanced Features & Polish (Weeks 11-12)**
 
 ### **User Stories:**
-- **US-018**: As a player, I want keyboard shortcuts so that I can play efficiently
+- **US-018**: As a player, I want mouse and keyboard shortcuts so that I can play efficiently
 - **US-019**: As a player, I want statistics tracking so that I can see my improvement over time
 - **US-020**: As a player, I want accessibility features so that I can play regardless of abilities
 - **US-021**: As a player, I want to share my game results so that I can compete with friends
 
 ### **Technical Tasks:**
-- Implement keyboard navigation and shortcuts
+- Implement keyboard navigation and shortcuts, behavior on right-click and double-click
 - Add comprehensive statistics tracking
 - Implement accessibility features (ARIA labels, keyboard support)
 - Add social sharing functionality
@@ -480,56 +480,216 @@ This plan ensures that every line of code you write in the early phases will sup
 - **Solution**: Added conditional initialization and reactive statements for prop changes
 - **Lesson**: Components should gracefully handle missing or undefined props during initialization
 
-### **🔄 Current Session: Core Game Parameterization - COMPLETED**
+### **✅ Current Session: Game Protection & Debug System - COMPLETED**
 
-**Major Architectural Refactoring:**
-- ✅ **Pile Creation**: Refactored from hardcoded logic to dynamic `gameRules.getPileConfiguration()`
-- ✅ **Stock/Waste Mechanics**: Parameterized via `gameRules.getStockDrawingRules()`
-- ✅ **Card Flipping**: Customizable per pile type via `gameRules.getCardFlippingRules()`
-- ✅ **Move Recording**: Configurable data structure via `gameRules.getMoveRecordingConfig()`
-- ✅ **Game Variant Detection**: Added `gameRules.usesStockWaste()` and variant-aware methods
+**Game Protection Features:**
+- ✅ **Foundation → Tableau Protection**: Prevented invalid moves in Klondike (cards cannot move from Foundation back to Tableau)
+- ✅ **Score Limit Protection**: Added maximum score limits to prevent infinite loops (1000 points for both variants)
+- ✅ **Move Validation**: Enhanced `isValidMove()` to check source pile restrictions before target validation
+- ✅ **Variant-Specific Rules**: Different movement restrictions for Klondike vs FreeCell
 
 **New Rules Interface Methods:**
 ```javascript
 // Base GameRules class additions
-getPileConfiguration()           // What piles to create
-usesStockWaste()                // Whether game uses stock/waste
-getStockDrawingRules()          // How stock drawing works
-getCardFlippingRules()          // When/how cards flip
-getMoveRecordingConfig()        // What move data to record
-getSpecialActions()             // Game-specific actions
-isValidSpecialAction()          // Validate special actions
-executeSpecialAction()          // Execute special actions
+canCardBeMovedFromPile(card, sourcePile, gameState)  // Check if card can leave its pile
+getMaximumScore()                                     // Get max score to prevent infinite loops
+getCardNotationConfig()                               // Configure debug label display
 ```
 
 **Rules Implementation Updates:**
-- **KlondikeRules**: Implements all new methods with Klondike-specific configurations
-- **FreeCellRules**: Implements all new methods with FreeCell-specific configurations (no stock/waste, no flipping)
+- **KlondikeRules**: 
+  - `canCardBeMovedFromPile()`: Blocks Foundation → Tableau moves
+  - `getMaximumScore()`: Returns 1000 points
+  - `getCardNotationConfig()`: Shows S/T labels for debugging
+- **FreeCellRules**: 
+  - `canCardBeMovedFromPile()`: Allows movement from any pile type
+  - `getMaximumScore()`: Returns 1000 points
+  - `getCardNotationConfig()`: Shows S/T labels for debugging
 
-**Core Game Class Refactoring:**
-- **`Game.createPiles()`**: Now uses Rules configuration instead of hardcoded logic
-- **`Game.drawFromStock()`**: Parameterized stock drawing behavior
-- **`Game.redealWasteToStock()`**: Configurable redeal and shuffle behavior
-- **`Game.flipTopCardIfNeeded()`**: Flexible card flipping per pile type
-- **`Game.makeMove()` / `Game.makeStackMove()`**: Configurable move recording
-- **`Game.undoMove()`**: Enhanced to handle both single and stack moves
+**Debug System Improvements:**
+- ✅ **Hierarchical Debug Controls**: Main "Debug Info" toggle with nested controls underneath
+- ✅ **Card Notation Labels**: S/T indicators (Stacked vs Top) for debugging stacked-pile moves
+- ✅ **Score Warning System**: Visual warning (⚠️) when score approaches maximum
+- ✅ **Debug-Only Features**: Score limits and warnings only active when debug mode is enabled
 
-**Benefits of Parameterization:**
-- **Easier Game Variants**: New variants only need to implement the Rules interface
-- **Better Separation**: Core Game logic is generic, variant-specific rules are isolated
-- **Future-Proof**: Easy to add new pile types, mechanics, and special actions
-- **Consistent Behavior**: All variants follow the same architectural patterns
+**Debug Control Structure:**
+```
+🐛 Debug Controls
+├── Show Debug Info (main toggle)
+└── Nested Controls (only visible when Debug Info is enabled):
+    ├── Highlight Valid Moves
+    ├── Show Solvability Info (FreeCell only)
+    └── Show Card Notation
+```
 
-**What Could Be Further Parameterized (Future Phases):**
-1. **Scoring System**: Move hardcoded points to Rules configuration
-2. **Win Conditions**: Standardize win condition interface
-3. **Deal Patterns**: Generic deal pattern system
-4. **Card Movement**: More granular movement rules
-5. **Game State**: Configurable persistence and serialization
+**Card Notation System:**
+- **S/T Labels**: Red labels showing whether cards are Stacked (S) or Top (T)
+- **Variant-Aware**: Uses `gameRules.getCardNotationConfig()` for future extensibility
+- **Clean Display**: Only shows essential debugging info (no redundant suit/color labels)
+- **Positioning**: Top-right corner with proper sizing (10px font, rounded corners)
+
+**Technical Implementation:**
+- **Game Class**: Added `debugMode` property and `setDebugMode()` method
+- **Score Validation**: Conditional score limit checks only when `debugMode` is true
+- **Component Props**: All Card components now receive `gameRules` for variant-specific behavior
+- **Reactive Updates**: Debug mode changes automatically propagate to all components
+
+**Key Benefits:**
+- **Game Integrity**: Prevents invalid moves and infinite loops
+- **Production Safe**: Score limits only active in debug mode
+- **Clean Debugging**: Focused S/T labels without redundant information
+- **Variant Flexibility**: Easy to customize debug behavior per game variant
+- **Future Extensibility**: Card notation config ready for new variants (Spider, Tarot, etc.)
 
 **Current Status:**
-- **Core Architecture**: Fully parameterized and flexible
-- **Game Variants**: Klondike and FreeCell both working with new parameterized system
-- **Code Quality**: Significantly improved separation of concerns
-- **Extensibility**: Ready for easy addition of new variants (including Tarot)
-- **Maintainability**: Much cleaner and more organized codebase
+- **Game Protection**: Foundation moves blocked in Klondike, score limits prevent infinite loops
+- **Debug System**: Hierarchical controls with focused card notation labels
+- **Code Quality**: Clean separation between game logic and debugging features
+- **Extensibility**: Ready for easy addition of new variants with custom debug configurations
+- **Production Ready**: Debug features can be easily disabled for production builds
+
+### **✅ Current Session: Fortune's Foundation Tarot Variant - COMPLETED**
+
+**Fortune's Foundation Implementation:**
+- ✅ **Tarot Deck**: Created `TarotDeck` class (74 cards: 4 suits × 14 + 22 major arcana)
+- ✅ **Game Rules**: Implemented `FortunesFoundationRules` class with tarot-specific mechanics
+- ✅ **Custom Variant**: "Fortune's Foundation" - unique solitaire variant with tarot cards
+- ✅ **UI Adaptation**: Responsive design successfully handles larger deck and different pile counts
+
+**Fortune's Foundation Rules:**
+- **Deck**: 74 cards (4 Minor Arcana suits × 14 + 22 Major Arcana)
+- **Tableau**: 10 piles, same-suit ascending stacks, face-up dealing
+- **Foundations**: 6 piles (4 Minor Arcana + 2 Major Arcana)
+- **Minor Arcana**: A-K in 4 suits with distinct colors (red, blue, green, gold)
+- **Major Arcana**: 0-21 with oversized numbers, descending pile (21→0)
+- **Free Cell**: Single free cell with blocking rule for Minor Arcana foundations
+- **Initial Deal**: Pre-seeded aces in foundations, equal-length tableau piles
+
+**Technical Implementation:**
+- **Deck Configuration**: `TarotDeck` extends `DeckConfig` with tarot-specific properties
+- **Game Rules**: `FortunesFoundationRules` extends `GameRules` with variant-specific logic
+- **Card Display**: Enhanced `Card.svelte` with color bars, emoji suits, and contrast-aware text
+- **Game Board**: Two-row foundation layout with spreading Major Arcana cards
+- **Move Validation**: Complete validation system for all pile types including free cells
+
+**UI/UX Features:**
+- **Color-Coded Suits**: Horizontal color bars with contrast-aware rank text
+- **Emoji Suit Symbols**: Visual suit indicators for better recognition
+- **Two-Row Foundations**: Minor Arcana (top) and Major Arcana (bottom) in separate rows
+- **Card Spreading**: Major Arcana foundations spread horizontally like Klondike waste pile
+- **Responsive Layout**: Tableau piles fit on single row, foundation areas properly aligned
+
+**Architecture Improvements:**
+- **Abstract Method Implementation**: All required abstract methods properly implemented
+- **Variant-Specific Validation**: Each variant now has complete control over move validation
+- **Stack Movement**: Fixed stack movement validation across all variants
+- **Free Cell Support**: Added free cell validation to base class with variant-specific overrides
+
+**Key Achievements:**
+- **First Tarot Variant**: Successfully implemented complex tarot-based solitaire
+- **Architecture Validation**: Proved generalization-first approach works for complex variants
+- **UI Flexibility**: Demonstrated responsive design can handle significantly different layouts
+- **Rule Complexity**: Implemented variant with unique mechanics (free cell blocking, dual foundation types)
+
+### **🔧 Recent Bug Fixes & Improvements**
+
+**Free Cell Move Validation (Fixed):**
+- **Problem**: Fortune's Foundation free cell moves were failing validation
+- **Root Cause**: Base class `isValidMove` was missing `freecell` case
+- **Solution**: Made `isValidMove` abstract, implemented in each variant
+- **Result**: Free cell moves now work in both FreeCell and Fortune's Foundation
+
+**Klondike Stack Movement (Fixed):**
+- **Problem**: Stack movement (S cards) was broken in Klondike
+- **Root Cause**: `canCardBeMovedFromPile` was too restrictive (only allowed top cards)
+- **Solution**: Modified to allow any face-up tableau card (stack validation happens later)
+- **Result**: Stack movement now works properly in Klondike
+
+**Horizontal Suit Notation (Fixed):**
+- **Problem**: FreeCell S cards weren't showing horizontal suit notation
+- **Root Cause**: CSS for `.rank-suit-horizontal` was identical to vertical notation
+- **Solution**: Fixed CSS to use `flex-direction: row` for horizontal display
+- **Result**: Stacked cards now show rank and suit side by side for better readability
+
+**Architecture Refactoring:**
+- **Moved Validation Logic**: All move validation now handled by variant-specific classes
+- **Abstract Base Class**: `GameRules` now properly abstract with clear contracts
+- **Variant Independence**: Each variant controls its own validation logic
+- **No More Conflicts**: Base class no longer interferes with variant-specific behavior
+
+### **🎯 Current Session: FreeCell T/S/U Notation & Architecture Cleanup - COMPLETED**
+
+**FreeCell T/S/U Debug Notation Implementation:**
+- **Goal**: Implement variant-specific card notation for FreeCell to distinguish accessible vs. inaccessible stacked cards
+- **Implementation**: Extended the debugging system architecture to support custom notation functions
+- **Result**: FreeCell now shows T (Top), S (Stacked/accessible), U (Unaccessible) labels
+
+**Technical Approach:**
+- **Extended Debugging System**: Modified `getCardNotationConfig()` to return custom `getNotationLabel` functions
+- **Variant-Specific Logic**: FreeCell notation logic contained within `FreeCellRules` class
+- **Clean Architecture**: Card component remains generic, calls custom notation when available
+- **Fallback Behavior**: Other variants continue to use default S/T notation unchanged
+
+**FreeCell Notation Logic:**
+- **T (Top)**: Card at the top of a pile (always accessible)
+- **S (Stacked)**: Card that's part of a valid alternating-color descending sequence
+- **U (Unaccessible)**: Face-up card that's not part of a valid stack sequence
+
+**Architecture Improvements:**
+- **Debug System Extension**: Proved the debugging architecture can handle variant-specific needs
+- **Clean Separation**: Notation logic properly contained within variant rules
+- **No Component Changes**: Card component remains generic and extensible
+- **Consistent Pattern**: Follows the same extension pattern used for other variant-specific features
+
+**Bug Fixes:**
+- **Stack Movement**: Fixed FreeCell stack movement by simplifying `canCardBeMovedFromPile`
+- **Move Validation**: Corrected logic to check accessibility in selection, validation in move
+- **Console Logging**: Eliminated excessive debug output that was cluttering the console
+
+**Key Insights:**
+- **Architecture Validation**: The debugging system architecture successfully handles complex variant needs
+- **Separation of Concerns**: Selection validation vs. move validation are distinct concerns
+- **Extension Pattern**: Variant-specific debugging can be added without modifying core components
+- **User Experience**: T/S/U notation provides valuable insight into FreeCell game state
+
+### **🔄 Next Phase: Game Polish & Advanced Features**
+
+**Ready for Implementation:**
+- **Core Variants**: Klondike, FreeCell, and Fortune's Foundation all working
+- **Architecture**: Fully parameterized and tested with complex variants
+- **Game Protection**: Robust move validation and score limiting
+- **Debug System**: Comprehensive debugging tools for development
+- **UI Flexibility**: Responsive design proven with significantly different layouts
+
+**Immediate Next Steps (Choose One):**
+
+**Option 1: Game Polish & User Experience**
+1. **Smooth Animations**: Add Svelte transitions for card movements
+2. **Undo/Redo System**: Implement move history with Svelte stores
+3. **Local Storage**: Save/restore game state between sessions
+4. **Game Statistics**: Track wins, losses, and performance metrics
+5. **Keyboard Shortcuts**: Add keyboard navigation and shortcuts
+
+**Option 2: Additional Variants**
+1. **Spider Solitaire**: Simpler variant to test different tableau rules
+2. **Yukon**: Variant with partial face-down tableau dealing
+3. **Canfield**: Variant with different foundation building rules
+4. **Custom Variants**: User-defined rule sets
+
+**Option 3: Performance & Testing**
+1. **Performance Optimization**: Optimize rendering for larger deck sizes
+2. **Comprehensive Testing**: Add test suite for all variants
+3. **Accessibility**: Implement ARIA labels and keyboard support
+4. **Mobile Optimization**: Improve touch interactions and responsive design
+
+**Recommended Path: Game Polish First**
+- **Why**: Core variants are working well, time to improve user experience
+- **Benefits**: More polished gameplay, better user retention, easier to test new features
+- **Foundation**: Polish features will benefit all current and future variants
+- **User Feedback**: Better experience will help identify areas for improvement
+
+**Long-term Vision:**
+- **Variant Library**: Collection of 10+ solitaire variants
+- **User Customization**: Allow users to create custom variants
+- **Multiplayer**: Basic multiplayer functionality for competitive play
+- **Mobile App**: PWA with offline support and mobile-optimized UI

@@ -3,24 +3,46 @@
 	import { gameState, deckConfig, gameActions } from '$lib/stores/gameStore.js';
 	import { Game } from '$lib/game/core/Game.js';
 	import { StandardDeck } from '$lib/game/configs/StandardDeck.js';
+	import { TarotDeck } from '$lib/game/configs/TarotDeck.js';
 	import { KlondikeRules } from '$lib/game/rules/KlondikeRules.js';
 	import { FreeCellRules } from '$lib/game/rules/FreeCellRules.js';
+	import { FortunesFoundationRules } from '$lib/game/rules/FortunesFoundationRules.js';
 	import { shouldShowDebug, shouldHighlightValidMoves, shouldLogToConsole } from '$lib/config/environment.js';
 	import Card from './Card.svelte';
 	
 	let game = null;
 	let gameStarted = false;
 	let selectedCard = null;
-	
-				let showDebugInfo = false; // Default value
+	let showDebugInfo = false; // Default value
 	let showValidMoves = false; // Default value
+	let showSolvabilityInfo = false; // Solvability info toggle (nested under Debug Info)
+	let showCardNotation = false; // Card notation toggle (nested under Debug Info)
+	let showNewGameConfirmation = false; // New game confirmation dialog
 	
 	// Initialize debug values from environment
 	onMount(() => {
-		showDebugInfo = import.meta.env.DEV;
-		showValidMoves = import.meta.env.DEV;
+		if (import.meta.env.DEV) {
+			showDebugInfo = true;
+			showValidMoves = true;
+			showSolvabilityInfo = true;
+			showCardNotation = true;
+		}
 	});
-		let validTargets = []; // Cache valid targets for highlighting
+
+	// Simple solvability check (automatic)
+	let isPositionWinnable = true;
+	
+	// Update solvability whenever game state changes (only when Debug Info is enabled)
+	$: if (showDebugInfo && showSolvabilityInfo && game && game.gameRules && game.gameRules.isPositionWinnable) {
+		isPositionWinnable = game.gameRules.isPositionWinnable($gameState);
+	}
+
+	// Update game debug mode when debug flag changes
+	$: if (game) {
+		game.setDebugMode(showDebugInfo);
+	}
+	
+	let validTargets = []; // Cache valid targets for highlighting
 	
 	// Props
 	export let gameType = 'klondike';
@@ -29,47 +51,92 @@
 	$: ({ gameStarted } = $gameState);
 	$: ({ suits, ranks, deckSize } = $deckConfig);
 	
-	// Watch for gameType changes and start new game
-	$: if (gameType && game) {
-		console.log('GameType changed to:', gameType, 'starting new game');
-		startNewGame();
+	// Watch for gameType changes
+	$: if (gameType) {
+		console.log('GameBoard: gameType changed to:', gameType);
+		// Update deck config when game type changes
+		updateDeckConfig();
+		// Start new game if we're already mounted
+		if (game) {
+			console.log('GameBoard: Starting new game for gameType:', gameType);
+			startNewGame();
+		}
 	}
 	
-
+	// Helper function to get expected rules class name
+	function getExpectedRulesClass(gameType) {
+		switch (gameType) {
+			case 'klondike': return 'KlondikeRules';
+			case 'freecell': return 'FreeCellRules';
+			case 'fortunes-foundation': return 'FortunesFoundationRules';
+			default: return 'KlondikeRules';
+		}
+	}
+	
+	// Initialize deck config based on game type
+	function updateDeckConfig() {
+		if (gameType === 'fortunes-foundation') {
+			deckConfig.update(config => ({
+				...config,
+				suits: ['wands', 'cups', 'swords', 'pentacles', 'major'],
+				ranks: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+				deckSize: 74
+			}));
+		} else {
+			deckConfig.update(config => ({
+				...config,
+				suits: ['spades', 'hearts', 'diamonds', 'clubs'],
+				ranks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
+				deckSize: 52
+			}));
+		}
+	}
 	
 	onMount(() => {
 		console.log('GameBoard onMount called with gameType:', gameType);
 		
-		// Initialize with a standard deck for now
-		deckConfig.update(config => ({
-			...config,
-			suits: ['spades', 'hearts', 'diamonds', 'clubs'],
-			ranks: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13],
-			deckSize: 52
-		}));
+		updateDeckConfig();
 		
 		// Start the game automatically - but only if we have a valid gameType
 		if (gameType) {
 			console.log('Starting new game for:', gameType);
-			startNewGame();
+			// Use setTimeout to ensure this runs after the component is fully mounted
+			setTimeout(() => {
+				startNewGame();
+			}, 0);
 		} else {
 			console.log('No gameType provided, skipping game start');
 		}
 	});
 	
 	function startNewGame() {
+		console.log('startNewGame called with gameType:', gameType);
+		
 		// Create a new game with the selected game type
-		const standardDeck = new StandardDeck();
-		let gameRules;
+		let deck, gameRules;
 		
 		if (gameType === 'freecell') {
-			gameRules = new FreeCellRules();
+			console.log('Creating FreeCell game');
+			deck = new StandardDeck();
+			gameRules = new FreeCellRules(deck);
+		} else if (gameType === 'fortunes-foundation') {
+			console.log('Creating Fortune\'s Foundation game');
+			deck = new TarotDeck();
+			gameRules = new FortunesFoundationRules(deck);
 		} else {
-			gameRules = new KlondikeRules(standardDeck);
+			console.log('Creating Klondike game (default)');
+			// Default to Klondike
+			deck = new StandardDeck();
+			gameRules = new KlondikeRules(deck);
 		}
 		
-		game = new Game(standardDeck, gameRules);
+		console.log('Created deck:', deck.constructor.name);
+		console.log('Created gameRules:', gameRules.constructor.name);
+		
+		game = new Game(deck, gameRules);
+		console.log('Game created with rules:', game.gameRules.constructor.name);
 		game.startNewGame();
+		console.log('Game started, piles created:', game.piles.length);
 		selectedCard = null;
 		validTargets = []; // Clear valid targets when starting new game
 		
@@ -77,7 +144,7 @@
 		gameState.update(state => ({
 			...state,
 			gameStarted: true,
-			currentDeck: standardDeck,
+			currentDeck: deck,
 			gameRules: gameRules,
 			piles: [...game.piles],
 			score: game.score,
@@ -302,6 +369,10 @@
 	}
 	
 	function resetGame() {
+		showNewGameConfirmation = true;
+	}
+	
+	function confirmNewGame() {
 		if (game) {
 			game.reset();
 			selectedCard = null;
@@ -315,56 +386,120 @@
 				gameWon: false
 			}));
 		}
+		showNewGameConfirmation = false;
+		// Start a new game immediately after reset
+		startNewGame();
+	}
+	
+	function cancelNewGame() {
+		showNewGameConfirmation = false;
 	}
 </script>
 
 <div class="game-board">
-	{#if !gameStarted}
-		<div class="welcome-screen">
-			<h2>Welcome to Solitaire!</h2>
-			<p>Click the button below to start a new game.</p>
-			<button class="start-button" on:click={startNewGame}>
-				Start New Game
-			</button>
-		</div>
-	{:else}
+	{#if gameStarted}
 		<div class="game-layout">
-			<!-- Foundation and Free Cells area (top) - side by side for FreeCell -->
-			{#if gameType === 'freecell' && $gameState.piles.filter(p => p.type === 'freecell').length > 0}
+						<!-- Foundation and Free Cells area (top) - for FreeCell and Fortune's Foundation -->
+			{#if gameType === 'freecell' || gameType === 'fortunes-foundation'}
 				<div class="foundation-freecell-area">
 					<!-- Foundation area (left) -->
 					<div class="foundation-area">
 						<div class="area-header">
 							<h3>Foundation</h3>
 						</div>
-						<div class="foundation-piles">
-							{#each $gameState.piles.filter(p => p.type === 'foundation') as pile, i}
-								<div 
-									class="foundation-pile pile {shouldHighlightValidMoves() && selectedCard && validTargets.includes(pile) ? 'valid-target' : ''}" 
-									role="button"
-									tabindex="0"
-									on:click={() => handlePileClick(pile)}
-									on:keydown={(e) => e.key === 'Enter' && handlePileClick(pile)}
-								>
-									{#if pile.isEmpty()}
-										<div class="pile-placeholder">+</div>
-									{:else}
-										<Card 
-											card={pile.getTopCard()} 
-											isSelected={selectedCard === pile.getTopCard()}
-											showDebugInfo={showDebugInfo}
-											on:click={handleCardClick}
-										/>
-									{/if}
-								</div>
-							{/each}
-						</div>
+						
+						{#if gameType === 'fortunes-foundation'}
+							<!-- Minor Arcana foundations (top row) -->
+							<div class="foundation-row minor-arcana">
+								{#each $gameState.piles.filter(p => p.type === 'foundation' && p.index < 4) as pile, i}
+									<div 
+										class="foundation-pile pile {shouldHighlightValidMoves() && selectedCard && validTargets.includes(pile) ? 'valid-target' : ''}" 
+										role="button"
+										tabindex="0"
+										on:click={() => handlePileClick(pile)}
+										on:keydown={(e) => e.key === 'Enter' && handlePileClick(pile)}
+									>
+										{#if pile.isEmpty()}
+											<div class="pile-placeholder">+</div>
+										{:else}
+											<Card 
+												card={pile.getTopCard()}
+												isSelected={selectedCard === pile.getTopCard()}
+												showDebugInfo={showDebugInfo}
+												showCardNotation={showCardNotation}
+												gameRules={game ? game.gameRules : null}
+												on:click={handleCardClick}
+											/>
+										{/if}
+									</div>
+								{/each}
+							</div>
+							
+							<!-- Major Arcana foundations (bottom row) -->
+							<div class="foundation-row major-arcana">
+								{#each $gameState.piles.filter(p => p.type === 'foundation' && p.index >= 4) as pile, pileIndex}
+									<div 
+										class="foundation-pile pile major-arcana-pile {shouldHighlightValidMoves() && selectedCard && validTargets.includes(pile) ? 'valid-target' : ''}" 
+										role="button"
+										tabindex="0"
+										on:click={() => handlePileClick(pile)}
+										on:keydown={(e) => e.key === 'Enter' && handlePileClick(pile)}
+									>
+										{#if pile.isEmpty()}
+											<div class="pile-placeholder">+</div>
+										{:else}
+											<!-- Show all cards in the pile with spreading effect -->
+											{#each pile.cards as card, cardIndex}
+												{@const isStacked = cardIndex < (pile.cards.length - 1)}
+																							<div class="major-arcana-card" 
+												 style="left: {pile.index === 4 ? card.rank * 15 : (315 - card.rank * 15)}px; z-index: {cardIndex};">
+													<Card 
+														card={card}
+														isSelected={selectedCard === card}
+														showDebugInfo={showDebugInfo}
+														showCardNotation={showCardNotation}
+														gameRules={game ? game.gameRules : null}
+														on:click={handleCardClick}
+													/>
+												</div>
+											{/each}
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{:else}
+							<!-- FreeCell foundations (single row) -->
+							<div class="foundation-piles">
+								{#each $gameState.piles.filter(p => p.type === 'foundation') as pile, i}
+									<div 
+										class="foundation-pile pile {shouldHighlightValidMoves() && selectedCard && validTargets.includes(pile) ? 'valid-target' : ''}" 
+										role="button"
+										tabindex="0"
+										on:click={() => handlePileClick(pile)}
+										on:keydown={(e) => e.key === 'Enter' && handlePileClick(pile)}
+									>
+										{#if pile.isEmpty()}
+											<div class="pile-placeholder">+</div>
+										{:else}
+											<Card 
+												card={pile.getTopCard()}
+												isSelected={selectedCard === pile.getTopCard()}
+												showDebugInfo={showDebugInfo}
+												showCardNotation={showCardNotation}
+												gameRules={game ? game.gameRules : null}
+												on:click={handleCardClick}
+											/>
+										{/if}
+									</div>
+								{/each}
+							</div>
+						{/if}
 					</div>
 					
 					<!-- Free Cell area (right) -->
 					<div class="freecell-area">
 						<div class="area-header">
-							<h3>Free Cells</h3>
+							<h3>{$gameState.piles.filter(p => p.type === 'freecell').length > 1 ? 'Free Cells' : 'Free Cell'}</h3>
 						</div>
 						<div class="freecell-piles">
 							{#each $gameState.piles.filter(p => p.type === 'freecell') as pile, i}
@@ -379,9 +514,14 @@
 										<div class="pile-placeholder">+</div>
 									{:else}
 										<Card 
-											card={pile.getTopCard()} 
+											card={pile.getTopCard()}
 											isSelected={selectedCard === pile.getTopCard()}
 											showDebugInfo={showDebugInfo}
+											showCardNotation={showCardNotation}
+											gameRules={game ? game.gameRules : null}
+											sourcePile={pile}
+											cardIndex={pile.cards.length - 1}
+											gameState={$gameState}
 											on:click={handleCardClick}
 										/>
 									{/if}
@@ -409,9 +549,11 @@
 									<div class="pile-placeholder">+</div>
 								{:else}
 									<Card 
-										card={pile.getTopCard()} 
+										card={pile.getTopCard()}
 										isSelected={selectedCard === pile.getTopCard()}
 										showDebugInfo={showDebugInfo}
+										showCardNotation={showCardNotation}
+										gameRules={game ? game.gameRules : null}
 										on:click={handleCardClick}
 									/>
 								{/if}
@@ -447,7 +589,13 @@
 											isSelected={selectedCard === card}
 											showFace={card.isFaceUp}
 											isStacked={isStacked}
+											stackType={isStacked ? 'horizontal' : 'vertical'}
 											showDebugInfo={showDebugInfo}
+											showCardNotation={showCardNotation}
+											gameRules={game ? game.gameRules : null}
+											sourcePile={pile}
+											cardIndex={cardIndex}
+											gameState={$gameState}
 											on:click={handleCardClick}
 										/>
 									</div>
@@ -494,10 +642,12 @@
 										isSelected={selectedCard === card}
 										showFace={card.isFaceUp}
 										isStacked={isStacked}
-										stackType={isStacked ? 'horizontal' : 'vertical'}
+										stackType={isStacked ? 'vertical' : 'vertical'}
 										showDebugInfo={showDebugInfo}
+										showCardNotation={showCardNotation}
+										gameRules={game ? game.gameRules : null}
 										on:click={handleCardClick}
-									/>
+										/>
 								</div>
 							{/each}
 						{/if}
@@ -511,7 +661,7 @@
 		{#if $gameState.gameWon}
 			<div class="win-message">
 				<h2>🎉 Congratulations! 🎉</h2>
-				<p>You've won {gameType === 'freecell' ? 'FreeCell' : 'Klondike'} Solitaire!</p>
+				<p>You've won {gameType === 'freecell' ? 'FreeCell' : gameType === 'fortunes-foundation' ? "Fortune's Foundation" : 'Klondike'} Solitaire!</p>
 				<p>Final Score: {$gameState.score}</p>
 				<button class="control-button" on:click={resetGame}>
 					Play Again
@@ -527,10 +677,23 @@
 					<input type="checkbox" bind:checked={showDebugInfo}>
 					Show Debug Info
 				</label>
-				<label class="debug-toggle">
-					<input type="checkbox" bind:checked={showValidMoves}>
-					Highlight Valid Moves
-				</label>
+				
+				{#if showDebugInfo}
+					<div class="nested-debug-controls">
+						<label class="debug-toggle nested">
+							<input type="checkbox" bind:checked={showValidMoves}>
+							Highlight Valid Moves
+						</label>
+						<label class="debug-toggle nested">
+							<input type="checkbox" bind:checked={showSolvabilityInfo}>
+							Show Solvability Info
+						</label>
+						<label class="debug-toggle nested">
+							<input type="checkbox" bind:checked={showCardNotation}>
+							Show Card Notation
+						</label>
+					</div>
+				{/if}
 			</div>
 		{/if}
 		
@@ -564,7 +727,7 @@
 				<div class="status-line">
 					<span class="status-label">Game State:</span>
 					<span class="status-value">
-						{$gameState.piles.filter(p => p.type === 'foundation').reduce((sum, p) => sum + p.getCardCount(), 0)}/{gameType === 'freecell' ? '52' : '52'} foundation
+						{$gameState.piles.filter(p => p.type === 'foundation').reduce((sum, p) => sum + p.getCardCount(), 0)}/{gameType === 'fortunes-foundation' ? '74' : '52'} foundation
 					</span>
 				</div>
 				{#if gameType === 'freecell'}
@@ -581,6 +744,14 @@
 					</span>
 				</div>
 				{/if}
+				{#if showDebugInfo && showSolvabilityInfo && gameType === 'freecell'}
+					<div class="status-line">
+						<span class="status-label">Winnable:</span>
+						<span class="status-value {isPositionWinnable ? 'winnable' : 'unwinnable'}">
+							{isPositionWinnable ? 'Yes' : 'No'}
+						</span>
+					</div>
+				{/if}
 			{/if}
 			<div class="status-line">
 				<span class="status-label">Moves:</span>
@@ -596,8 +767,32 @@
 			<button class="control-button" on:click={resetGame}>
 				New Game
 			</button>
-			<div class="score">Score: {game ? game.score : 0}</div>
-		</div>
+			<div class="score">
+				Score: {game ? game.score : 0}
+				{#if showDebugInfo && game && game.gameRules && game.score >= game.gameRules.getMaximumScore() * 0.9}
+					<span class="score-warning" title="Score approaching maximum - possible infinite loop detected!">
+						⚠️
+					</span>
+				{/if}
+			</div>
+		<!-- New Game Confirmation Dialog -->
+		{#if showNewGameConfirmation}
+			<div class="confirmation-overlay">
+				<div class="confirmation-dialog">
+					<h3>Start New Game?</h3>
+					<p>This will end the current deal. Are you sure you want to start a new game?</p>
+					<div class="confirmation-buttons">
+						<button class="control-button cancel" on:click={cancelNewGame}>
+							Cancel
+						</button>
+						<button class="control-button confirm" on:click={confirmNewGame}>
+							Start New Game
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+		</div> <!-- Close game-layout -->
 	{/if}
 </div>
 
@@ -949,6 +1144,99 @@
 		gap: clamp(5px, 1vw, 15px); /* Responsive gap */
 	}
 	
+	/* Two-row foundation layout for Fortune's Foundation */
+	.foundation-row {
+		display: flex !important; /* Override any grid display */
+		justify-content: center;
+		gap: 10px;
+		margin-bottom: 15px;
+		flex-direction: row;
+		flex-wrap: nowrap;
+	}
+	
+	/* Override the general grid rule specifically for foundation rows */
+	.foundation-area .foundation-row {
+		display: flex !important;
+	}
+	
+	/* Most specific override for the exact structure */
+	.foundation-freecell-area .foundation-area .foundation-row {
+		display: flex !important;
+		grid: none !important;
+		grid-template-columns: none !important;
+		grid-template-rows: none !important;
+	}
+	
+	/* Override for the specific foundation rows */
+	.foundation-freecell-area .foundation-area .foundation-row.minor-arcana,
+	.foundation-freecell-area .foundation-area .foundation-row.major-arcana {
+		display: flex !important;
+		grid: none !important;
+	}
+	
+	/* Force flexbox properties */
+	.foundation-freecell-area .foundation-area .foundation-row {
+		flex-direction: row !important;
+		flex-wrap: nowrap !important;
+		align-items: flex-start !important;
+		justify-content: center !important;
+	}
+	
+	/* Override grid display on foundation-area itself */
+	.foundation-freecell-area .foundation-area {
+		display: flex !important;
+		flex-direction: column !important;
+		grid: none !important;
+		grid-template: none !important;
+		grid-template-columns: none !important;
+		grid-template-rows: none !important;
+		overflow: visible !important;
+	}
+	
+	/* Fix Foundation area header to be horizontal like other areas */
+	.foundation-freecell-area .foundation-area .area-header {
+		writing-mode: horizontal-tb !important;
+		transform: none !important;
+		width: auto !important;
+	}
+	
+	.foundation-freecell-area .foundation-area .area-header h3 {
+		writing-mode: horizontal-tb !important;
+		transform: none !important;
+		text-align: center !important;
+	}
+	
+	.foundation-row:last-child {
+		margin-bottom: 0;
+	}
+	
+	/* Minor Arcana foundations (top row) */
+	.foundation-row.minor-arcana {
+		justify-content: center;
+		gap: 15px;
+	}
+	
+	/* Major Arcana foundations (bottom row) */
+	.foundation-row.major-arcana {
+		justify-content: space-between;
+		max-width: 800px; /* Wider to accommodate spreading */
+		margin: 0 auto;
+	}
+	
+
+	
+	.major-arcana-pile {
+		position: relative;
+		min-width: 300px; /* Wide enough for spreading */
+		overflow: visible;
+	}
+	
+	.major-arcana-card {
+		position: absolute;
+		top: 0;
+		transition: all 0.2s ease;
+	}
+	
 	.freecell-piles {
 		display: grid;
 		grid-template-columns: repeat(4, 70px);
@@ -962,9 +1250,9 @@
 	.tableau-piles {
 		grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
 		width: 100%;
-		max-width: min(100%, 700px);
+		max-width: min(100%, 900px); /* Increased to accommodate 11 tableau piles */
 		margin: 0 auto;
-		gap: clamp(5px, 1vw, 15px); /* Responsive gap */
+		gap: clamp(3px, 0.5vw, 8px); /* Reduced gap to align with Foundation piles */
 		overflow: visible; /* Allow cards to extend beyond container */
 	}
 	
@@ -1134,6 +1422,72 @@
 		border-color: rgba(255, 255, 255, 0.5);
 	}
 	
+	/* Confirmation Dialog Styles */
+	.confirmation-overlay {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(0, 0, 0, 0.7);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		z-index: 1000;
+		backdrop-filter: blur(5px);
+	}
+	
+	.confirmation-dialog {
+		background: white;
+		border-radius: 12px;
+		padding: 30px;
+		max-width: 400px;
+		text-align: center;
+		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+		position: relative;
+		top: 50%;
+		left: 50%;
+		transform: translate(-50%, -50%);
+	}
+	
+	.confirmation-dialog h3 {
+		margin: 0 0 15px 0;
+		color: #333;
+		font-size: 1.5rem;
+	}
+	
+	.confirmation-dialog p {
+		margin: 0 0 25px 0;
+		color: #666;
+		line-height: 1.5;
+	}
+	
+	.confirmation-buttons {
+		display: flex;
+		gap: 15px;
+		justify-content: center;
+	}
+	
+	.confirmation-buttons .control-button {
+		min-width: 120px;
+	}
+	
+	.confirmation-buttons .cancel {
+		background: #6c757d;
+	}
+	
+	.confirmation-buttons .cancel:hover {
+		background: #5a6268;
+	}
+	
+	.confirmation-buttons .confirm {
+		background: #dc3545;
+	}
+	
+	.confirmation-buttons .confirm:hover {
+		background: #c82333;
+	}
+	
 	.score {
 		color: white;
 		font-size: 1.1rem;
@@ -1141,6 +1495,15 @@
 		padding: 10px 20px;
 		background: rgba(0, 123, 255, 0.3);
 		border-radius: 6px;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.score-warning {
+		color: #ff6b35;
+		font-size: 1rem;
+		cursor: help;
 	}
 	
 	.win-message {
@@ -1222,6 +1585,19 @@
 		color: rgba(255, 255, 255, 0.9);
 		cursor: pointer;
 	}
+
+	.nested-debug-controls {
+		margin-left: 20px;
+		padding-left: 15px;
+		border-left: 2px solid rgba(255, 193, 7, 0.3);
+		margin-top: 10px;
+	}
+
+	.debug-toggle.nested {
+		margin-bottom: 8px;
+		font-size: 0.9rem;
+		color: rgba(255, 255, 255, 0.8);
+	}
 	
 	.debug-toggle:last-child {
 		margin-bottom: 0;
@@ -1231,5 +1607,15 @@
 		width: 18px;
 		height: 18px;
 		accent-color: #ffc107;
+	}
+
+
+
+	.winnable {
+		color: #4CAF50;
+	}
+
+	.unwinnable {
+		color: #F44336;
 	}
 </style>

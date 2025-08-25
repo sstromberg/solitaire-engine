@@ -11,6 +11,7 @@ export class Game {
 		this.gameStarted = false;
 		this.gameWon = false;
 		this.selectedCard = null;
+		this.debugMode = false; // Debug mode flag for score limiting
 	}
 
 	// Initialize a new game
@@ -93,6 +94,47 @@ export class Game {
 					tableauPile.addCard(card);
 				}
 			});
+		} else if (dealConfig.type === 'fortunes-foundation') {
+			// Fortune's Foundation dealing - place aces in foundations, rest in tableau
+			console.log('Dealing Fortune\'s Foundation style...');
+			
+			const tableauPiles = this.piles.filter(p => p.type === 'tableau');
+			const foundationPiles = this.piles.filter(p => p.type === 'foundation');
+			
+			// Deal cards one by one, placing aces in foundations
+			for (let pileIndex = 0; pileIndex < dealConfig.tableauPiles; pileIndex++) {
+				if (pileIndex === dealConfig.emptyPileIndex) {
+					continue; // Skip empty pile
+				}
+				
+				const tableauPile = tableauPiles[pileIndex];
+				let cardsDealtToPile = 0;
+				
+				// Deal cards until we reach the target count for this pile
+				while (cardsDealtToPile < dealConfig.tableauCardsPerPile) {
+					const card = this.cards[cardIndex++];
+					
+					// Check if this is a Minor Arcana ace
+					if (card.isMinorArcana() && card.rank === 1) {
+						// Find the appropriate foundation pile based on suit
+						const suitOrder = ['wands', 'cups', 'swords', 'pentacles'];
+						const foundationIndex = suitOrder.indexOf(card.suit);
+						if (foundationIndex >= 0 && foundationIndex < foundationPiles.length) {
+							// Place ace in foundation
+							card.isFaceUp = true;
+							foundationPiles[foundationIndex].addCard(card);
+							console.log(`Placed ${card.getShortDisplay()} in foundation ${foundationIndex}`);
+							// Don't increment cardsDealtToPile - we'll deal another card to replace it
+							continue;
+						}
+					}
+					
+					// Place non-ace card in tableau
+					card.isFaceUp = true;
+					tableauPile.addCard(card);
+					cardsDealtToPile++;
+				}
+			}
 		}
 		
 		// Remaining cards go to stock (if stock pile exists)
@@ -165,6 +207,15 @@ export class Game {
 		// Update score
 		const moveScore = this.gameRules.getMoveScore(card, targetPile, this);
 		this.score += moveScore;
+		
+		// Check for maximum score to prevent infinite loops (only in debug mode)
+		if (this.debugMode) {
+			const maxScore = this.gameRules.getMaximumScore();
+			if (this.score > maxScore) {
+				console.error(`Score ${this.score} exceeds maximum ${maxScore} - possible infinite loop detected!`);
+				this.score = maxScore; // Cap the score
+			}
+		}
 
 		// Add move to history
 		this.moves.push(move);
@@ -243,6 +294,15 @@ export class Game {
 		// Update score (only for the top card)
 		const moveScore = this.gameRules.getMoveScore(card, targetPile, this);
 		this.score += moveScore;
+		
+		// Check for maximum score to prevent infinite loops (only in debug mode)
+		if (this.debugMode) {
+			const maxScore = this.gameRules.getMaximumScore();
+			if (this.score > maxScore) {
+				console.error(`Score ${this.score} exceeds maximum ${maxScore} - possible infinite loop detected!`);
+				this.score = maxScore; // Cap the score
+			}
+		}
 
 		// Add move to history
 		this.moves.push(move);
@@ -259,7 +319,26 @@ export class Game {
 
 	// Check if a move is valid
 	isValidMove(card, targetPile) {
+		// First check if the card can be moved from its current pile
+		const sourcePile = this.findCardPile(card);
+		if (!sourcePile) {
+			console.log('Cannot find source pile for card');
+			return false;
+		}
+		
+		// Check if the card can be moved from its current pile (prevents Foundation → Tableau in Klondike)
+		if (!this.gameRules.canCardBeMovedFromPile(card, sourcePile, this)) {
+			console.log('Card cannot be moved from its current pile type:', sourcePile.type);
+			return false;
+		}
+		
+		// Then check if the move to the target pile is valid
 		return this.gameRules.isValidMove(card, targetPile, this);
+	}
+
+	// Set debug mode for score limiting
+	setDebugMode(enabled) {
+		this.debugMode = enabled;
 	}
 
 	// Find which pile contains a specific card

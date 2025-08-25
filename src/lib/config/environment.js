@@ -31,17 +31,8 @@ export const config = writable({
 	},
 });
 
-// Helper function to check if debug features should be enabled
-export function shouldShowDebug() {
-	return import.meta.env.DEV || false; // Simplified for now
-}
-
-// Helper function to check if valid moves should be highlighted
-export function shouldHighlightValidMoves() {
-	return import.meta.env.DEV; // Simplified for now
-}
-
-// Helper function to check if console logs should be enabled
-export function shouldLogToConsole() {
-	return import.meta.env.DEV; // Simplified for now
-}
+// Simplified helper functions - all just check if we're in dev mode
+export const isDev = import.meta.env.DEV;
+export const shouldShowDebug = () => isDev;
+export const shouldHighlightValidMoves = () => isDev;
+export const shouldLogToConsole = () => isDev;

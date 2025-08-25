@@ -237,13 +237,64 @@ export class FreeCellRules extends GameRules {
 				flipOnEmpty: false,
 				flipOnMove: false,
 				flipCondition: 'never'
-			},
-			stock: {
-				flipOnEmpty: false,
-				flipOnMove: false,
-				flipCondition: 'never'
 			}
 		};
+	}
+
+	// Simple solvability check for FreeCell
+	isPositionWinnable(gameState) {
+		// Basic check: if any card is completely blocked, position is unwinnable
+		const tableauPiles = gameState.piles.filter(p => p.type === 'tableau');
+		
+		for (const pile of tableauPiles) {
+			if (pile.cards.length === 0) continue;
+			
+			// Check if any card is blocked by cards above it
+			for (let i = 0; i < pile.cards.length - 1; i++) {
+				const card = pile.cards[i];
+				// If this card can't be moved anywhere, position is unwinnable
+				if (!this.canCardBeMoved(card, gameState)) {
+					return false;
+				}
+			}
+		}
+		
+		return true; // Position appears winnable
+	}
+	
+	// Helper: get the color of a card (red or black)
+	getCardColor(card) {
+		const redSuits = ['hearts', 'diamonds'];
+		return redSuits.includes(card.suit) ? 'red' : 'black';
+	}
+
+	// Helper: check if a card can be moved anywhere
+	canCardBeMoved(card, gameState) {
+		// Check tableau piles
+		const tableauPiles = gameState.piles.filter(p => p.type === 'tableau');
+		for (const pile of tableauPiles) {
+			if (this.isValidTableauMove(card, pile, gameState)) {
+				return true;
+			}
+		}
+		
+		// Check foundation piles
+		const foundationPiles = gameState.piles.filter(p => p.type === 'foundation');
+		for (const pile of foundationPiles) {
+			if (this.isValidFoundationMove(card, pile, gameState)) {
+				return true;
+			}
+		}
+		
+		// Check free cells
+		const freeCellPiles = gameState.piles.filter(p => p.type === 'freecell');
+		for (const pile of freeCellPiles) {
+			if (pile.isEmpty()) {
+				return true;
+			}
+		}
+		
+		return false;
 	}
 
 	// Override scoring rules for FreeCell
@@ -254,6 +305,76 @@ export class FreeCellRules extends GameRules {
 			freecell: { points: 0, bonus: 0 },    // No points for free cells
 			stock: { points: 0, bonus: 0 },       // No stock in FreeCell
 			waste: { points: 0, bonus: 0 }        // No waste in FreeCell
+		};
+	}
+
+	// Get the score for a move
+	getMoveScore(card, targetPile, gameState) {
+		if (targetPile.type === 'foundation') {
+			return 10; // Points for building foundation
+		} else if (targetPile.type === 'tableau') {
+			return 1;  // Points for tableau moves
+		} else if (targetPile.type === 'freecell') {
+			return 0;  // No points for moving to free cells
+		}
+		return 0;
+	}
+
+	// Check if a card can be moved from its current pile
+	canCardBeMovedFromPile(card, sourcePile, gameState) {
+		// In FreeCell, cards can be moved from any pile type
+		if (sourcePile.type === 'tableau') {
+			// Any face-up card in a tableau pile can be selected
+			// The actual move validation happens in isValidMove
+			return card.isFaceUp;
+		}
+		
+		// For other pile types, only the top card can be moved
+		const topCard = sourcePile.getTopCard();
+		return topCard === card;
+	}
+
+	// Get maximum possible score for this game variant (prevents infinite loops)
+	getMaximumScore() {
+		// In FreeCell: 52 cards × 10 points each for foundation = 520 points
+		// Plus some points for tableau moves during play
+		// Conservative estimate: 1000 points
+		return 1000;
+	}
+
+	// Override card notation config for FreeCell
+	getCardNotationConfig() {
+		const self = this; // Capture 'this' reference
+		return {
+			showStackedIndicator: true,    // Show T/S/U for FreeCell-specific notation
+			position: 'top-right',         // Top-right corner
+			variant: 'freecell',           // Indicate this is FreeCell-specific notation
+			getNotationLabel: function(card, sourcePile, cardIndex, gameState) {
+				if (sourcePile.type !== 'tableau') {
+					// For non-tableau piles, just show T for top card
+					return cardIndex === sourcePile.cards.length - 1 ? 'T' : '';
+				}
+
+				// For tableau piles, determine if this card is accessible
+				if (cardIndex === sourcePile.cards.length - 1) {
+					return 'T'; // Top card is always accessible
+				}
+
+				// Check if this card and all cards above it form a valid stack
+				for (let i = cardIndex; i < sourcePile.cards.length - 1; i++) {
+					const currentCard = sourcePile.cards[i];
+					const nextCard = sourcePile.cards[i + 1];
+					
+					// Cards must be alternating colors and descending order
+					const currentColor = self.getCardColor(currentCard);
+					const nextColor = self.getCardColor(nextCard);
+					if (currentColor === nextColor || nextCard.rank !== currentCard.rank - 1) {
+						return 'U'; // Unaccessible - not part of a valid stack
+					}
+				}
+				
+				return 'S'; // Stacked - part of a valid stack
+			}
 		};
 	}
 

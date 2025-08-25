@@ -283,25 +283,9 @@ export class GameRules {
 		return null;
 	}
 
-	// Check if a move is valid
+	// Check if a move is valid (abstract - must be implemented by subclass)
 	isValidMove(card, targetPile, gameState) {
-		console.log('GameRules.isValidMove called with:', {
-			card: card ? card.getShortDisplay() : 'null',
-			targetPileType: targetPile.type,
-			targetPileIndex: targetPile.index
-		});
-		
-		let result = false;
-		if (targetPile.type === 'foundation') {
-			result = this.isValidFoundationMove(card, targetPile, gameState);
-			console.log('Foundation move validation result:', result);
-		} else if (targetPile.type === 'tableau') {
-			result = this.isValidTableauMove(card, targetPile, gameState);
-			console.log('Tableau move validation result:', result);
-		}
-		
-		console.log('Final validation result:', result);
-		return result;
+		throw new Error('isValidMove must be implemented by subclass');
 	}
 
 	// Get the score for a move
@@ -325,6 +309,26 @@ export class GameRules {
 			freecell: { points: 0, bonus: 0 },    // Default: no points for free cells
 			stock: { points: 0, bonus: 0 },       // Default: no points for stock
 			waste: { points: 0, bonus: 0 }        // Default: no points for waste
+		};
+	}
+
+	// Abstract method: Check if a card can be moved from its current pile
+	canCardBeMovedFromPile(card, sourcePile, gameState) {
+		throw new Error('canCardBeMovedFromPile must be implemented by subclass');
+	}
+	
+
+
+	// Abstract method: Get maximum possible score for this game variant
+	getMaximumScore() {
+		throw new Error('getMaximumScore must be implemented by subclass');
+	}
+
+	// Get debug label configuration for card notation
+	getCardNotationConfig() {
+		return {
+			showStackedIndicator: true,    // Show S/T for stacked vs top cards
+			position: 'top-right'          // Where to position the label
 		};
 	}
 
@@ -425,10 +429,8 @@ export class GameRules {
 		throw new Error('Special actions not supported in this variant');
 	}
 
-	// Check if a stack of cards can be moved together
+	// Check if a stack of cards can be moved together (abstract - must be implemented by subclass)
 	canMoveStack(cards, targetPile, gameState) {
-		// Default implementation - subclasses should override for specific rules
-		// For most games, this is just a basic validation
-		return cards.length > 0 && this.isValidMove(cards[0], targetPile, gameState);
+		throw new Error('canMoveStack must be implemented by subclass');
 	}
 }

@@ -177,6 +177,44 @@ export class KlondikeRules extends GameRules {
 		return 0;
 	}
 
+	// Check if a card can be moved from its current pile (prevents Foundation → Tableau in Klondike)
+	canCardBeMovedFromPile(card, sourcePile, gameState) {
+		// In Klondike, cards cannot be moved from foundation piles to tableau
+		if (sourcePile.type === 'foundation') {
+			return false;
+		}
+		
+		// Cards can be moved from tableau if they're face up
+		// (Stack validation will happen later in canMoveStack)
+		if (sourcePile.type === 'tableau') {
+			return card.isFaceUp;
+		}
+		
+		// Cards can be moved from stock/waste
+		if (sourcePile.type === 'stock' || sourcePile.type === 'waste') {
+			const topCard = sourcePile.getTopCard();
+			return topCard === card;
+		}
+		
+		return false;
+	}
+
+	// Get maximum possible score for this game variant (prevents infinite loops)
+	getMaximumScore() {
+		// In Klondike: 52 cards × 10 points each for foundation = 520 points
+		// Plus some points for tableau moves during play
+		// Conservative estimate: 1000 points
+		return 1000;
+	}
+
+	// Override card notation config for Klondike
+	getCardNotationConfig() {
+		return {
+			showStackedIndicator: true,    // Show S/T for stacked vs top cards
+			position: 'top-right'          // Top-right corner
+		};
+	}
+
 	// Override pile configuration for Klondike
 	getPileConfiguration() {
 		return {
@@ -233,6 +271,24 @@ export class KlondikeRules extends GameRules {
 				flipCondition: 'never'
 			}
 		};
+	}
+
+	// Override move validation for Klondike
+	isValidMove(card, targetPile, gameState) {
+		console.log('KlondikeRules.isValidMove called with:', {
+			card: card ? card.getShortDisplay() : 'null',
+			targetPileType: targetPile.type,
+			targetPileIndex: targetPile.index
+		});
+
+		if (targetPile.type === 'foundation') {
+			return this.isValidFoundationMove(card, targetPile, gameState);
+		} else if (targetPile.type === 'tableau') {
+			return this.isValidTableauMove(card, targetPile, gameState);
+		}
+		
+		console.log('Unknown pile type:', targetPile.type);
+		return false;
 	}
 
 	// Override stack movement rules for Klondike

@@ -19,6 +19,13 @@
 			description: 'Strategic solitaire with 8 tableau piles and free cells',
 			icon: '🏗️',
 			rules: 'Use free cells to temporarily store cards, build up foundation piles by suit'
+		},
+		{
+			id: 'fortunes-foundation',
+			name: "Fortune's Foundation",
+			description: 'Tarot solitaire with 11 tableau piles and Major Arcana',
+			icon: '🔮',
+			rules: 'Build same-suit stacks in ascending or descending order, Major Arcana have special foundation piles'
 		}
 	];
 	
@@ -55,7 +62,7 @@
 			<button class="return-btn" on:click={returnToMenu}>
 				← Back to Menu
 			</button>
-			<h1>{availableGames.find(g => g.id === $selectedGame)?.name} Solitaire</h1>
+			<h1>{availableGames.find(g => g.id === $selectedGame)?.name}</h1>
 		</div>
 		<GameBoard gameType={$selectedGame} />
 	</div>
@@ -96,7 +103,7 @@
 		
 		<div class="coming-soon">
 			<h3>Coming Soon</h3>
-			<p>Tarot variants, Spider, and more!</p>
+			<p>Spider, Yukon, and more variants!</p>
 		</div>
 	</div>
 {/if}
