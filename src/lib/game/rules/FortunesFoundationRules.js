@@ -114,7 +114,9 @@ export class FortunesFoundationRules extends GameRules {
 			// Must be ascending from Ace
 			const topCard = targetPile.getTopCard();
 			if (!topCard) return card.rank === 1; // Only Aces on empty piles
-			return card.rank === topCard.rank + 1;
+			
+			// Must be same suit and next ascending rank
+			return card.suit === topCard.suit && card.rank === topCard.rank + 1;
 		} else {
 			// Major Arcana foundations (4-5)
 			if (!card.isMajorArcana()) return false;
@@ -188,11 +190,42 @@ export class FortunesFoundationRules extends GameRules {
 
 	// Override card notation config for tarot
 	getCardNotationConfig() {
-		return {
+		const config = {
 			showStackedIndicator: true,    // Show S/T for stacked vs top cards
 			showArcanaInfo: true,          // Show Major Arcana values
-			position: 'top-right'
+			position: 'top-right',
+			// Custom notation function for Fortune's Foundation
+			getNotationLabel: function(card, sourcePile, cardIndex, gameState) {
+				if (!card) return '';
+				
+				const isTopCard = cardIndex === sourcePile.cards.length - 1;
+				
+				// For all cards (Major and Minor Arcana), use consistent T/S/U notation
+				if (isTopCard) {
+					return 'T'; // Top card is always moveable
+				} else {
+					// Check if this card is part of a valid moveable sequence
+					// In Fortune's Foundation, cards can only be moved as a stack if they form a valid sequence
+					// (same suit, consecutive ranks in either direction)
+					
+					// Check if this card and all cards above it form a valid sequence
+					for (let i = cardIndex; i < sourcePile.cards.length - 1; i++) {
+						const currentCard = sourcePile.cards[i];
+						const nextCard = sourcePile.cards[i + 1];
+						
+						// Cards must be same suit and consecutive rank
+						if (currentCard.suit !== nextCard.suit) return 'U';
+						
+						const rankDiff = Math.abs(currentCard.rank - nextCard.rank);
+						if (rankDiff !== 1) return 'U';
+					}
+					
+					return 'S'; // Stacked - part of a valid sequence
+				}
+			}
 		};
+		
+		return config;
 	}
 	
 	// Get maximum possible score for this variant

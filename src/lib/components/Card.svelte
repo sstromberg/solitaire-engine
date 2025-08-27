@@ -51,7 +51,7 @@
 				
 				<!-- Stacked indicator (S/T) or custom notation (T/S/U for FreeCell) -->
 				{#if config.showStackedIndicator}
-					<div style="position: absolute; top: 0; right: 0; background: red; color: white; font-size: 10px; padding: 2px 4px; border-radius: 2px;">
+					<div style="position: absolute; top: 0; right: 0; background: red; color: white; font-size: 10px; padding: 2px 4px; border-radius: 2px; z-index: 1000;">
 						{#if config.getNotationLabel && sourcePile && gameState}
 							{config.getNotationLabel(card, sourcePile, cardIndex, gameState)}
 						{:else}

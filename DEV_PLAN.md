@@ -693,3 +693,345 @@ getCardNotationConfig()                               // Configure debug label d
 - **User Customization**: Allow users to create custom variants
 - **Multiplayer**: Basic multiplayer functionality for competitive play
 - **Mobile App**: PWA with offline support and mobile-optimized UI
+
+## **Build & Deployment Instructions**
+
+### **Development Server Setup**
+
+**Prerequisites:**
+- Node.js 18+ installed
+- npm or yarn package manager
+
+**Local Development:**
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# The app will be available at http://localhost:5173
+# Hot reload is enabled for development
+```
+
+**Development Commands:**
+```bash
+npm run dev          # Start development server with hot reload
+npm run build        # Build for production
+npm run preview      # Preview production build locally
+npm run check        # Run Svelte check (if using TypeScript)
+npm run lint         # Run ESLint (if configured)
+```
+
+**Environment Configuration:**
+- Development server runs on port 5173 by default
+- Environment variables can be set in `src/lib/config/environment.js`
+- Debug mode is enabled by default in development
+
+### **Production Build Process**
+
+**Build Command:**
+```bash
+npm run build
+```
+
+**Build Output:**
+- Production files are generated in the `dist/` directory
+- Static assets are optimized and minified
+- CSS is extracted and optimized
+- JavaScript is bundled and tree-shaken
+
+**Build Artifacts:**
+```
+dist/
+├── assets/          # Optimized JS, CSS, and other assets
+├── index.html       # Main HTML file
+└── favicon.ico      # App icon
+```
+
+**Build Optimization:**
+- Vite automatically optimizes bundle size
+- Unused code is eliminated through tree-shaking
+- Assets are compressed and optimized
+- CSS is minified and purged of unused styles
+
+### **Production Deployment Options**
+
+#### **Option 1: Static Hosting (Recommended)**
+
+**Netlify:**
+```bash
+# Install Netlify CLI
+npm install -g netlify-cli
+
+# Deploy from dist folder
+netlify deploy --dir=dist --prod
+
+# Or connect to Git repository for automatic deployments
+netlify deploy --prod
+```
+
+**Vercel:**
+```bash
+# Install Vercel CLI
+npm install -g vercel
+
+# Deploy from dist folder
+vercel --prod
+
+# Or connect to Git repository for automatic deployments
+vercel --prod
+```
+
+**GitHub Pages:**
+```bash
+# Add to package.json scripts
+"deploy": "npm run build && gh-pages -d dist"
+
+# Install gh-pages package
+npm install --save-dev gh-pages
+
+# Deploy
+npm run deploy
+```
+
+#### **Option 2: Traditional Web Server**
+
+**Apache Configuration:**
+```apache
+# .htaccess file in dist/ directory
+RewriteEngine On
+RewriteBase /
+RewriteRule ^index\.html$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
+
+# Enable compression
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript
+</IfModule>
+```
+
+**Nginx Configuration:**
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+    root /var/www/solitaire/dist;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Enable compression
+    gzip on;
+    gzip_types text/html text/plain text/xml text/css text/javascript application/javascript;
+}
+```
+
+#### **Option 3: Docker Deployment**
+
+**Dockerfile:**
+```dockerfile
+# Multi-stage build for production
+FROM node:18-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY . .
+RUN npm run build
+
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/nginx.conf
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+```
+
+**Docker Compose:**
+```yaml
+version: '3.8'
+services:
+  solitaire:
+    build: .
+    ports:
+      - "80:80"
+    restart: unless-stopped
+```
+
+### **Environment-Specific Configuration**
+
+**Development Environment:**
+```javascript
+// src/lib/config/environment.js
+export const config = {
+  debugMode: true,
+  apiUrl: 'http://localhost:3000',
+  enableHotReload: true
+};
+```
+
+**Production Environment:**
+```javascript
+// src/lib/config/environment.js
+export const config = {
+  debugMode: false,
+  apiUrl: 'https://api.yourdomain.com',
+  enableHotReload: false
+};
+```
+
+**Environment Variables:**
+```bash
+# .env.local (development)
+VITE_DEBUG_MODE=true
+VITE_API_URL=http://localhost:3000
+
+# .env.production
+VITE_DEBUG_MODE=false
+VITE_API_URL=https://api.yourdomain.com
+```
+
+### **Performance Optimization for Production**
+
+**Build Optimizations:**
+- Enable gzip compression on web server
+- Use CDN for static assets
+- Implement browser caching headers
+- Optimize images and assets
+
+**Runtime Optimizations:**
+- Disable debug mode in production
+- Minimize console logging
+- Optimize Svelte component rendering
+- Use lazy loading for non-critical components
+
+**Caching Strategy:**
+```javascript
+// Service Worker for offline support
+// public/sw.js
+const CACHE_NAME = 'solitaire-v1';
+const urlsToCache = [
+  '/',
+  '/index.html',
+  '/assets/main.js',
+  '/assets/main.css'
+];
+
+self.addEventListener('install', event => {
+  event.waitUntil(
+    caches.open(CACHE_NAME)
+      .then(cache => cache.addAll(urlsToCache))
+  );
+});
+```
+
+### **Monitoring & Analytics**
+
+**Performance Monitoring:**
+- Use Lighthouse for performance audits
+- Monitor Core Web Vitals
+- Track bundle size and load times
+- Monitor user experience metrics
+
+**Error Tracking:**
+- Implement error boundary components
+- Log errors to external service (Sentry, LogRocket)
+- Monitor JavaScript errors in production
+- Track user interaction failures
+
+**Analytics Integration:**
+```javascript
+// Google Analytics 4
+import { initializeApp } from 'firebase/app';
+import { getAnalytics } from 'firebase/analytics';
+
+const firebaseConfig = {
+  // Your Firebase config
+};
+
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);
+```
+
+### **Security Considerations**
+
+**Production Security:**
+- Disable debug mode and console logging
+- Implement Content Security Policy (CSP)
+- Use HTTPS in production
+- Sanitize user inputs
+- Implement rate limiting if adding backend
+
+**CSP Headers:**
+```http
+Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';
+```
+
+### **Deployment Checklist**
+
+**Pre-Deployment:**
+- [ ] Run `npm run build` successfully
+- [ ] Test production build locally with `npm run preview`
+- [ ] Verify all game variants work correctly
+- [ ] Check responsive design on different screen sizes
+- [ ] Disable debug mode for production
+- [ ] Optimize images and assets
+- [ ] Update environment configuration
+
+**Deployment:**
+- [ ] Upload files to hosting provider
+- [ ] Configure custom domain (if applicable)
+- [ ] Set up SSL certificate
+- [ ] Configure redirects and routing
+- [ ] Test all functionality in production
+- [ ] Monitor performance and errors
+
+**Post-Deployment:**
+- [ ] Verify all game variants work
+- [ ] Test on different devices and browsers
+- [ ] Monitor performance metrics
+- [ ] Check error logs
+- [ ] Gather user feedback
+- [ ] Plan next iteration
+
+### **Continuous Deployment Setup**
+
+**GitHub Actions Workflow:**
+```yaml
+# .github/workflows/deploy.yml
+name: Deploy to Production
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+      - run: npm ci
+      - run: npm run build
+      - name: Deploy to Netlify
+        uses: nwtgck/actions-netlify@v2.0
+        with:
+          publish-dir: './dist'
+          production-branch: main
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          deploy-message: "Deploy from GitHub Actions"
+```
+
+**Automatic Deployment Benefits:**
+- Consistent deployment process
+- Reduced human error
+- Faster iteration cycles
+- Easy rollback capabilities
+- Automated testing integration
+
+This deployment guide ensures your Svelte solitaire app can be easily built, tested, and deployed to production environments while maintaining the high quality and performance standards established during development.

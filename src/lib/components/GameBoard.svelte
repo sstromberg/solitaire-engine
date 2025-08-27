@@ -28,6 +28,11 @@
 			showCardNotation = true;
 		}
 	});
+	
+	// Auto-enable card notation for Fortune's Foundation (tarot games benefit from notation)
+	$: if (gameType === 'fortunes-foundation') {
+		showCardNotation = true;
+	}
 
 	// Simple solvability check (automatic)
 	let isPositionWinnable = true;
@@ -433,6 +438,20 @@
 										{/if}
 									</div>
 								{/each}
+								
+								<!-- Lock overlay when free cell is occupied -->
+								{#if $gameState.piles.some(p => p.type === 'freecell' && !p.isEmpty())}
+									<div class="foundation-lock-overlay">
+										<div class="lock-icon">🔒</div>
+										<div class="lock-text">Locked</div>
+										<div class="lock-tooltip">
+											<div class="tooltip-content">
+												<strong>Foundation Locked</strong><br>
+												Minor Arcana cards cannot be placed in foundation piles while the free cell is occupied.
+											</div>
+										</div>
+									</div>
+								{/if}
 							</div>
 							
 							<!-- Major Arcana foundations (bottom row) -->
@@ -452,7 +471,7 @@
 											{#each pile.cards as card, cardIndex}
 												{@const isStacked = cardIndex < (pile.cards.length - 1)}
 																							<div class="major-arcana-card" 
-												 style="left: {pile.index === 4 ? card.rank * 15 : (315 - card.rank * 15)}px; z-index: {cardIndex};">
+												 style="left: {pile.index === 4 ? card.rank * 15 : (240 - (21 - card.rank) * 15)}px; z-index: {cardIndex};">
 													<Card 
 														card={card}
 														isSelected={selectedCard === card}
@@ -1214,6 +1233,109 @@
 	.foundation-row.minor-arcana {
 		justify-content: center;
 		gap: 15px;
+		position: relative; /* For positioning the lock overlay */
+	}
+	
+	/* Foundation lock overlay when free cell is occupied */
+	.foundation-lock-overlay {
+		position: absolute;
+		top: 0;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		background: rgba(128, 128, 128, 0.7); /* Translucent gray */
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		border-radius: 8px;
+		backdrop-filter: blur(2px);
+		z-index: 10;
+		pointer-events: auto; /* Allow hover events for tooltip */
+	}
+	
+	.foundation-lock-overlay .lock-icon {
+		font-size: 24px;
+		margin-bottom: 4px;
+		opacity: 0.9;
+	}
+	
+	.foundation-lock-overlay .lock-text {
+		font-size: 12px;
+		font-weight: 600;
+		color: #333;
+		text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+	}
+	
+	/* Enhanced tooltip */
+	.foundation-lock-overlay .lock-tooltip {
+		position: absolute;
+		bottom: -10px;
+		left: 50%;
+		transform: translateX(-50%);
+		background: rgba(0, 0, 0, 0.9);
+		color: white;
+		padding: 8px 12px;
+		border-radius: 6px;
+		font-size: 11px;
+		line-height: 1.3;
+		max-width: min(280px, calc(100vw - 40px)); /* Responsive width that stays on screen */
+		white-space: normal; /* Allow text to wrap */
+		text-align: center;
+		opacity: 0;
+		transition: opacity 0.3s ease;
+		pointer-events: none;
+		z-index: 20;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+		/* Ensure tooltip stays on screen */
+		word-wrap: break-word;
+		overflow-wrap: break-word;
+	}
+	
+	/* Show tooltip on hover */
+	.foundation-lock-overlay:hover .lock-tooltip {
+		opacity: 1;
+	}
+	
+	/* Responsive adjustments for smaller screens */
+	@media (max-width: 768px) {
+		.foundation-lock-overlay .lock-tooltip {
+			max-width: 240px;
+			font-size: 10px;
+			padding: 6px 10px;
+		}
+	}
+	
+	@media (max-width: 480px) {
+		.foundation-lock-overlay .lock-tooltip {
+			max-width: 200px;
+			font-size: 9px;
+			padding: 5px 8px;
+		}
+	}
+	
+
+	
+	/* Tooltip arrow */
+	.foundation-lock-overlay .lock-tooltip::before {
+		content: '';
+		position: absolute;
+		top: -6px;
+		left: 50%;
+		transform: translateX(-50%);
+		border-left: 6px solid transparent;
+		border-right: 6px solid transparent;
+		border-bottom: 6px solid rgba(0, 0, 0, 0.9);
+	}
+	
+	/* Tooltip content styling */
+	.foundation-lock-overlay .tooltip-content {
+		text-align: center;
+	}
+	
+	.foundation-lock-overlay .tooltip-content strong {
+		color: #ffd700;
+		font-weight: 700;
 	}
 	
 	/* Major Arcana foundations (bottom row) */

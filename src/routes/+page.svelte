@@ -9,23 +9,23 @@
 		{
 			id: 'klondike',
 			name: 'Klondike',
-			description: 'Classic solitaire with 7 tableau piles',
+			description: 'The classic: 7 face-down tableau piles, alternate colors',
 			icon: '🃏',
 			rules: 'Build up foundation piles by suit, build down tableau piles alternating colors'
 		},
 		{
 			id: 'freecell',
 			name: 'FreeCell',
-			description: 'Strategic solitaire with 8 tableau piles and free cells',
+			description: 'Another classic: use the free cells strategically to enable freedom of action',
 			icon: '🏗️',
-			rules: 'Use free cells to temporarily store cards, build up foundation piles by suit'
+			rules: 'Four free cells temporarily store cards; alternate colors and build up foundation piles by suit'
 		},
 		{
 			id: 'fortunes-foundation',
 			name: "Fortune's Foundation",
-			description: 'Tarot solitaire with 11 tableau piles and Major Arcana',
+			description: 'A tarot-deck variant created by Zachtronics; can you order the larger deck with limited degrees of freedom?',
 			icon: '🔮',
-			rules: 'Build same-suit stacks in ascending or descending order, Major Arcana have special foundation piles'
+			rules: 'Build same-suit stacks in ascending or descending order, Major Arcana can go into the foundation starting at both 0 and 21'
 		}
 	];
 	
@@ -98,163 +98,139 @@
 				console.log('Test button clicked');
 				selectedGame.set('klondike');
 				console.log('Test: selectedGame set to klondike');
-			}}>Test Store Update</button>
-		</div>
-		
-		<div class="coming-soon">
-			<h3>Coming Soon</h3>
-			<p>Spider, Yukon, and more variants!</p>
+			}}>Test: Set to Klondike</button>
 		</div>
 	</div>
 {/if}
 
 <style>
-	.menu-container, .game-container {
+	/* Game Container Styles */
+	.game-container {
 		max-width: 1200px;
 		margin: 0 auto;
 		padding: 20px;
-		text-align: center;
-	}
-
-	h1 {
-		color: #2c3e50;
-		margin-bottom: 10px;
-		font-size: 3rem;
 	}
 	
-	.subtitle {
-		color: #7f8c8d;
-		font-size: 1.2rem;
-		margin-bottom: 40px;
-	}
-
-	.game-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-		gap: 30px;
-		margin-bottom: 50px;
-	}
-
-	.game-card {
-		background: white;
-		border-radius: 15px;
-		padding: 30px;
-		box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-		transition: all 0.3s ease;
-		cursor: pointer;
-		border: 2px solid transparent;
-	}
-
-	.game-card:hover {
-		transform: translateY(-5px);
-		box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
-		border-color: #3498db;
-	}
-
-	.game-icon {
-		font-size: 4rem;
-		margin-bottom: 20px;
-	}
-
-	.game-card h2 {
-		color: #2c3e50;
-		margin-bottom: 15px;
-		font-size: 1.8rem;
-	}
-
-	.game-description {
-		color: #34495e;
-		font-size: 1.1rem;
-		margin-bottom: 15px;
-		font-weight: 500;
-	}
-
-	.game-rules {
-		color: #7f8c8d;
-		font-size: 0.9rem;
-		margin-bottom: 25px;
-		line-height: 1.4;
-	}
-
-	.play-btn {
-		background: #3498db;
-		color: white;
-		border: none;
-		padding: 12px 24px;
-		border-radius: 25px;
-		font-size: 1rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: background 0.3s ease;
-	}
-
-	.play-btn:hover {
-		background: #2980b9;
-	}
-
-	.coming-soon {
-		background: #f8f9fa;
-		border-radius: 15px;
-		padding: 30px;
-		border: 2px dashed #bdc3c7;
-	}
-
-	.coming-soon h3 {
-		color: #7f8c8d;
-		margin-bottom: 10px;
-		font-size: 1.3rem;
-	}
-
-	.coming-soon p {
-		color: #95a5a6;
-		font-size: 1rem;
-	}
-
 	.game-header {
 		display: flex;
 		align-items: center;
 		gap: 20px;
-		margin-bottom: 30px;
+		margin-bottom: 20px;
 	}
-
+	
 	.return-btn {
-		background: #95a5a6;
+		padding: 10px 15px;
+		background: #007bff;
 		color: white;
 		border: none;
-		padding: 10px 20px;
-		border-radius: 20px;
+		border-radius: 5px;
+		cursor: pointer;
+		font-size: 14px;
+	}
+	
+	.return-btn:hover {
+		background: #0056b3;
+	}
+	
+	/* Menu Container Styles */
+	.menu-container {
+		max-width: 800px;
+		margin: 0 auto;
+		padding: 40px 20px;
+		text-align: center;
+	}
+	
+	h1 {
+		font-size: 3rem;
+		margin-bottom: 10px;
+		color: #333;
+	}
+	
+	.subtitle {
+		font-size: 1.2rem;
+		color: #666;
+		margin-bottom: 40px;
+	}
+	
+	.game-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+		gap: 20px;
+		margin-bottom: 40px;
+	}
+	
+	.game-card {
+		background: white;
+		border: 2px solid #e0e0e0;
+		border-radius: 15px;
+		padding: 25px;
+		text-align: center;
+		cursor: pointer;
+		transition: all 0.3s ease;
+		box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+	}
+	
+	.game-card:hover {
+		transform: translateY(-5px);
+		box-shadow: 0 8px 15px rgba(0, 0, 0, 0.2);
+		border-color: #007bff;
+	}
+	
+	.game-icon {
+		font-size: 3rem;
+		margin-bottom: 15px;
+	}
+	
+	.game-card h2 {
+		font-size: 1.5rem;
+		margin-bottom: 10px;
+		color: #333;
+	}
+	
+	.game-description {
+		font-size: 1rem;
+		color: #666;
+		margin-bottom: 15px;
+		line-height: 1.4;
+	}
+	
+	.game-rules {
 		font-size: 0.9rem;
+		color: #888;
+		margin-bottom: 20px;
+		line-height: 1.3;
+		font-style: italic;
+	}
+	
+	.play-btn {
+		background: #28a745;
+		color: white;
+		border: none;
+		padding: 12px 25px;
+		border-radius: 25px;
+		font-size: 1rem;
 		cursor: pointer;
 		transition: background 0.3s ease;
-		white-space: nowrap;
 	}
-
-	.return-btn:hover {
-		background: #7f8c8d;
+	
+	.play-btn:hover {
+		background: #218838;
 	}
-
-	.game-header h1 {
-		margin: 0;
-		font-size: 2.5rem;
-	}
-
+	
+	/* Responsive Design */
 	@media (max-width: 768px) {
+		h1 {
+			font-size: 2.5rem;
+		}
+		
 		.game-grid {
 			grid-template-columns: 1fr;
-			gap: 20px;
+			gap: 15px;
 		}
 		
 		.game-card {
 			padding: 20px;
 		}
-		
-		.game-header {
-			flex-direction: column;
-			gap: 15px;
-		}
-		
-		.return-btn {
-			order: -1;
-		}
 	}
 </style>
+
