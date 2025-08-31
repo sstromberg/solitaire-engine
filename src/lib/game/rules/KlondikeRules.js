@@ -15,7 +15,71 @@ export class KlondikeRules extends GameRules {
 		return 4; // One for each suit
 	}
 
-	// Check if cards can be stacked on tableau (descending, alternating colors)
+	// Create pile configuration for Klondike
+	getPileConfiguration() {
+		return {
+			foundation: {
+				count: this.getFoundationPileCount(),
+				create: true
+			},
+			tableau: {
+				count: this.getTableauPileCount(),
+				create: true
+			},
+			stock: {
+				count: 1,
+				create: true
+			},
+			waste: {
+				count: 1,
+				create: true
+			},
+			freecell: {
+				count: 0, // Klondike has no free cell piles
+				create: false
+			}
+		};
+	}
+
+	// Create deal pattern for Klondike
+	getDealPattern() {
+		return {
+			type: 'sequential',
+			piles: ['tableau', 'foundation', 'stock', 'waste'],
+			faceUp: [true, false, false, false],
+			distribution: 'custom',
+			tableau: {
+				piles: 7,
+				cardsPerPile: [1, 2, 3, 4, 5, 6, 7],
+				faceUp: [true, true, true, true, true, true, true], // Per-pile face-up (for top card only)
+				faceUpPositions: ['top'] // Special indicator: only top card in each pile is face up
+			},
+			foundation: {
+				piles: 4,
+				cardsPerPile: [0, 0, 0, 0], // No cards initially
+				faceUp: [false, false, false, false]
+			},
+			stock: {
+				piles: 1,
+				cardsPerPile: [24], // Remaining 24 cards (52 - 28 tableau cards)
+				faceUp: [false] // Face down
+			},
+			waste: {
+				piles: 1,
+				cardsPerPile: [0], // No cards initially
+				faceUp: [false]
+			},
+			freecell: {
+				piles: 0,
+				cardsPerPile: [],
+				faceUp: []
+			}
+		};
+	}
+
+
+	// movement rules
+	// functions for each pile type, then a switch statement
 	canStackCards(card, targetCard) {
 		console.log('KlondikeRules.canStackCards called with:', {
 			card: card ? card.getShortDisplay() : 'null',
@@ -136,35 +200,16 @@ export class KlondikeRules extends GameRules {
 		return validTargets;
 	}
 
-	// Check if the game is won
-	checkWinCondition(gameState) {
-		// Game is won when all foundation piles have 13 cards (A through K)
-		const foundationPiles = gameState.piles.filter(pile => pile.type === 'foundation');
-		
-		return foundationPiles.every(pile => pile.getCardCount() === 13);
-	}
-
-	// Get the initial deal configuration for Klondike
-	getInitialDeal() {
-		const deal = {
-			tableau: [], // Array of arrays, one for each tableau pile
-			stockPile: 24,   // 24 cards go to stock (52 - 28 tableau cards)
-			wastePile: 0     // Waste pile starts empty
-		};
-		
-		// Deal 7 cards to tableau piles
-		// Pile 1 gets 1 card, Pile 2 gets 2 cards, etc.
-		for (let i = 0; i < 7; i++) {
-			deal.tableau[i] = [];
-			for (let j = 0; j <= i; j++) {
-				deal.tableau[i].push({
-					faceUp: j === i, // Only top card is face up
-					position: { pile: 'tableau', index: i, cardIndex: j }
-				});
+	// Get win conditions for Klondike
+	getWinConditions() {
+		return [
+			{
+				type: 'foundationComplete',
+				required: 'all',
+				cardsPerPile: 13,
+				description: 'All foundation piles must be complete (Ace to King)'
 			}
-		}
-		
-		return deal;
+		];
 	}
 
 	// Get the score for a move
@@ -199,14 +244,6 @@ export class KlondikeRules extends GameRules {
 		return false;
 	}
 
-	// Get maximum possible score for this game variant (prevents infinite loops)
-	getMaximumScore() {
-		// In Klondike: 52 cards × 10 points each for foundation = 520 points
-		// Plus some points for tableau moves during play
-		// Conservative estimate: 1000 points
-		return 1000;
-	}
-
 	// Override card notation config for Klondike
 	getCardNotationConfig() {
 		return {
@@ -215,31 +252,6 @@ export class KlondikeRules extends GameRules {
 		};
 	}
 
-	// Override pile configuration for Klondike
-	getPileConfiguration() {
-		return {
-			foundation: {
-				count: this.getFoundationPileCount(),
-				create: true
-			},
-			tableau: {
-				count: this.getTableauPileCount(),
-				create: true
-			},
-			stock: {
-				count: 1, // Klondike has 1 stock pile
-				create: true
-			},
-			waste: {
-				count: 1, // Klondike has 1 waste pile
-				create: true
-			},
-			freecell: {
-				count: 0, // Klondike has no free cell piles
-				create: false
-			}
-		};
-	}
 
 	// Override stock drawing rules for Klondike
 	getStockDrawingRules() {
@@ -312,6 +324,14 @@ export class KlondikeRules extends GameRules {
 		};
 	}
 
+	// Get maximum possible score for this game variant (prevents infinite loops)
+	getMaximumScore() {
+		// In Klondike: 52 cards × 10 points each for foundation = 520 points
+		// Plus some points for tableau moves during play
+		// Conservative estimate: 1000 points
+		return 1000;
+	}
+
 	// Override win conditions for Klondike
 	getWinConditions() {
 		return [
@@ -325,41 +345,6 @@ export class KlondikeRules extends GameRules {
 		];
 	}
 
-	// Override deal pattern for Klondike
-	getDealPattern() {
-		return {
-			type: 'sequential',
-			piles: ['tableau', 'foundation', 'stock', 'waste'],
-			faceUp: [true, false, false, false],
-			distribution: 'custom',
-			tableau: {
-				piles: 7,
-				cardsPerPile: [1, 1, 1, 1, 1, 1, 1], // 1 card per pile initially
-				faceUp: [true, true, true, true, true, true, true] // All face up
-			},
-			foundation: {
-				piles: 4,
-				cardsPerPile: [0, 0, 0, 0], // No cards initially
-				faceUp: [false, false, false, false]
-			},
-			stock: {
-				piles: 1,
-				cardsPerPile: [24], // Remaining 24 cards
-				faceUp: [false] // Face down
-			},
-			waste: {
-				piles: 1,
-				cardsPerPile: [0], // No cards initially
-				faceUp: [false]
-			},
-			freecell: {
-				piles: 0,
-				cardsPerPile: [],
-				faceUp: []
-			}
-		};
-	}
-
 	// Get game-specific rules description
 	getRulesDescription() {
 		return `Klondike Solitaire Rules:
@@ -367,7 +352,7 @@ export class KlondikeRules extends GameRules {
 		• Build tableau piles in descending order with alternating colors
 		• Only Kings can be placed on empty tableau piles
 		• Only Aces can start foundation piles
-		• Draw from stock to waste pile, can redeal waste to stock`;
+		• Draw from stock to waste pile, one card at a time, no recirc`;
 	}
 
 	// Helper method to get suit color

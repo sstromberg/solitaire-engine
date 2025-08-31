@@ -59,96 +59,161 @@ export class Game {
 		});
 	}
 
-	// Deal initial cards according to game rules
+	// Implement the deal using the dealPattern object for the relevant variant
 	dealInitialCards() {
-		const dealConfig = this.gameRules.getInitialDeal();
-		console.log('Deal config:', dealConfig);
+		const dealPattern = this.gameRules.getDealPattern();
+		console.log('Deal pattern:', dealPattern);
 		console.log('Available cards:', this.cards.length);
 		console.log('Available piles:', this.piles.map(p => ({ type: p.type, index: p.index })));
 		
 		let cardIndex = 0;
 		
-		// Deal to tableau piles
-		if (dealConfig.tableau) {
-			console.log('Dealing to tableau piles...');
-			// Klondike-style dealing with face-up/face-down cards
-			dealConfig.tableau.forEach((pileConfig, pileIndex) => {
-				const tableauPile = this.piles.find(p => p.type === 'tableau' && p.index === pileIndex);
-				console.log(`Tableau pile ${pileIndex}:`, tableauPile ? 'found' : 'not found');
+		// Deal cards based on the deal pattern configuration
+		if (dealPattern.type === 'sequential') {
+			// Deal cards sequentially to pile types in the specified order
+			dealPattern.piles.forEach(pileType => {
+				const pileConfig = dealPattern[pileType];
+				if (!pileConfig || pileConfig.piles === 0) return;
 				
-				pileConfig.forEach((cardConfig, cardPosition) => {
-					const card = this.cards[cardIndex++];
-					console.log(`Adding card ${cardIndex-1} to tableau ${pileIndex}, faceUp: ${cardConfig.faceUp}`);
-					card.isFaceUp = cardConfig.faceUp;
-					tableauPile.addCard(card);
-				});
+				cardIndex = this.dealToPileType(pileType, pileConfig, cardIndex);
 			});
-		} else if (dealConfig.cardsPerPile) {
-			// FreeCell-style dealing - all cards face up
-			dealConfig.cardsPerPile.forEach((cardCount, pileIndex) => {
-				const tableauPile = this.piles.find(p => p.type === 'tableau' && p.index === pileIndex);
+		} else {
+			// For other deal types, handle each pile type that has configuration
+			Object.keys(dealPattern).forEach(pileType => {
+				if (['type', 'piles', 'faceUp', 'distribution'].includes(pileType)) return;
 				
-				for (let i = 0; i < cardCount; i++) {
-					const card = this.cards[cardIndex++];
-					card.isFaceUp = true; // All cards face up in FreeCell
-					tableauPile.addCard(card);
-				}
+				const pileConfig = dealPattern[pileType];
+				if (!pileConfig || pileConfig.piles === 0) return;
+				
+				cardIndex = this.dealToPileType(pileType, pileConfig, cardIndex);
 			});
-		} else if (dealConfig.type === 'fortunes-foundation') {
-			// Fortune's Foundation dealing - place aces in foundations, rest in tableau
-			console.log('Dealing Fortune\'s Foundation style...');
+		}
+		
+		console.log(`Dealt ${cardIndex} cards, ${this.cards.length - cardIndex} remaining`);
+		
+		// Verify dealing results
+		this.verifyDealingResults();
+	}
+	
+	// Verify that dealing worked correctly
+	verifyDealingResults() {
+		console.log('=== DEALING VERIFICATION ===');
+		
+		const tableauPiles = this.piles.filter(p => p.type === 'tableau');
+		const foundationPiles = this.piles.filter(p => p.type === 'foundation');
+		const stockPiles = this.piles.filter(p => p.type === 'stock');
+		const wastePiles = this.piles.filter(p => p.type === 'waste');
+		const freecellPiles = this.piles.filter(p => p.type === 'freecell');
+		
+		console.log('Tableau piles:', tableauPiles.map((p, i) => `${i}: ${p.cards.length} cards (top: ${p.getTopCard()?.isFaceUp ? 'face-up' : 'face-down'})`));
+		console.log('Foundation piles:', foundationPiles.map((p, i) => `${i}: ${p.cards.length} cards`));
+		console.log('Stock piles:', stockPiles.map((p, i) => `${i}: ${p.cards.length} cards`));
+		console.log('Waste piles:', wastePiles.map((p, i) => `${i}: ${p.cards.length} cards`));
+		console.log('Free cell piles:', freecellPiles.map((p, i) => `${i}: ${p.cards.length} cards`));
+		
+		const totalCardsInPiles = this.piles.reduce((sum, pile) => sum + pile.cards.length, 0);
+		console.log(`Total cards in piles: ${totalCardsInPiles}, Expected: ${this.cards.length}`);
+		
+		if (totalCardsInPiles !== this.cards.length) {
+			console.error('DEALING ERROR: Card count mismatch!');
+		} else {
+			console.log('DEALING SUCCESS: All cards properly dealt');
+		}
+		
+		console.log('=== END VERIFICATION ===');
+	}
+	
+	// Deal cards to a specific pile type based on configuration
+	dealToPileType(pileType, pileConfig, startCardIndex) {
+		console.log(`Dealing to ${pileType} piles:`, pileConfig);
+		
+		const targetPiles = this.piles.filter(p => p.type === pileType);
+		let cardIndex = startCardIndex;
+		
+		// Deal cards to each pile according to the configuration
+		for (let pileIndex = 0; pileIndex < pileConfig.piles; pileIndex++) {
+			const targetPile = targetPiles[pileIndex];
+			if (!targetPile) {
+				console.warn(`Pile ${pileType}[${pileIndex}] not found`);
+				continue;
+			}
 			
-			const tableauPiles = this.piles.filter(p => p.type === 'tableau');
-			const foundationPiles = this.piles.filter(p => p.type === 'foundation');
+			const cardsForThisPile = pileConfig.cardsPerPile[pileIndex] || 0;
+			const faceUpForThisPile = pileConfig.faceUp[pileIndex] || false;
+			const faceUpPositions = pileConfig.faceUpPositions;
+			const aceRedirection = pileConfig.aceRedirection;
 			
-			// Deal cards one by one, placing aces in foundations
-			for (let pileIndex = 0; pileIndex < dealConfig.tableauPiles; pileIndex++) {
-				if (pileIndex === dealConfig.emptyPileIndex) {
-					continue; // Skip empty pile
+			console.log(`Dealing ${cardsForThisPile} cards to ${pileType}[${pileIndex}], faceUp: ${faceUpForThisPile}`);
+			
+			let cardsDealtToPile = 0;
+			while (cardsDealtToPile < cardsForThisPile) {
+				if (cardIndex >= this.cards.length) {
+					console.warn('Ran out of cards during dealing');
+					return cardIndex;
 				}
 				
-				const tableauPile = tableauPiles[pileIndex];
-				let cardsDealtToPile = 0;
+				const card = this.cards[cardIndex++];
 				
-				// Deal cards until we reach the target count for this pile
-				while (cardsDealtToPile < dealConfig.tableauCardsPerPile) {
-					const card = this.cards[cardIndex++];
-					
-					// Check if this is a Minor Arcana ace
-					if (card.isMinorArcana() && card.rank === 1) {
-						// Find the appropriate foundation pile based on suit
-						const suitOrder = ['wands', 'cups', 'swords', 'pentacles'];
-						const foundationIndex = suitOrder.indexOf(card.suit);
-						if (foundationIndex >= 0 && foundationIndex < foundationPiles.length) {
-							// Place ace in foundation
-							card.isFaceUp = true;
-							foundationPiles[foundationIndex].addCard(card);
-							console.log(`Placed ${card.getShortDisplay()} in foundation ${foundationIndex}`);
+				// Check for ace redirection (Fortune's Foundation special logic)
+				if (aceRedirection && aceRedirection.enabled) {
+					if (this.shouldRedirectCard(card, aceRedirection)) {
+						const redirectSuccess = this.redirectCardToFoundation(card, aceRedirection);
+						if (redirectSuccess) {
+							console.log(`Redirected ${card.getShortDisplay()} to foundation`);
 							// Don't increment cardsDealtToPile - we'll deal another card to replace it
 							continue;
 						}
 					}
-					
-					// Place non-ace card in tableau
-					card.isFaceUp = true;
-					tableauPile.addCard(card);
-					cardsDealtToPile++;
 				}
+				
+				// Determine face-up state for this card
+				let isFaceUp = faceUpForThisPile;
+				if (faceUpPositions && faceUpPositions.includes('top')) {
+					// Special case: only top card in pile is face up
+					isFaceUp = (cardsDealtToPile === cardsForThisPile - 1);
+				}
+				
+				card.isFaceUp = isFaceUp;
+				targetPile.addCard(card);
+				cardsDealtToPile++;
+				
+				console.log(`Added card ${cardIndex-1} to ${pileType}[${pileIndex}], position ${cardsDealtToPile-1}, faceUp: ${isFaceUp}`);
 			}
 		}
 		
-		// Remaining cards go to stock (if stock pile exists)
-		if (dealConfig.stockPile > 0) {
-			const stockPile = this.piles.find(p => p.type === 'stock');
-			console.log('Stock pile found:', !!stockPile);
-			console.log('Adding remaining cards to stock, starting from index:', cardIndex);
-			while (cardIndex < this.cards.length) {
-				const card = this.cards[cardIndex++];
-				card.isFaceUp = false;
-				stockPile.addCard(card);
+		return cardIndex;
+	}
+	
+	// Check if a card should be redirected based on redirection rules
+	shouldRedirectCard(card, redirectionConfig) {
+		// Parse the condition string - for now, handle the Fortune's Foundation case
+		if (redirectionConfig.condition === 'isMinorArcana() && rank === 1') {
+			return card.isMinorArcana() && card.rank === 1;
+		}
+		return false;
+	}
+	
+	// Redirect a card to the appropriate foundation pile
+	redirectCardToFoundation(card, redirectionConfig) {
+		if (redirectionConfig.targetPileType !== 'foundation') {
+			return false;
+		}
+		
+		const foundationPiles = this.piles.filter(p => p.type === 'foundation');
+		const suitMapping = redirectionConfig.suitMapping;
+		
+		if (suitMapping && suitMapping[card.suit] !== undefined) {
+			const foundationIndex = suitMapping[card.suit];
+			if (foundationIndex < foundationPiles.length) {
+				card.isFaceUp = true;
+				foundationPiles[foundationIndex].addCard(card);
+				return true;
 			}
 		}
+		
+		return false;
 	}
+	
 
 	// Make a move
 	makeMove(card, targetPile) {
@@ -220,8 +285,11 @@ export class Game {
 		// Add move to history
 		this.moves.push(move);
 
-		// Check if we need to flip a card
-		this.flipTopCardIfNeeded(sourcePile);
+		// Check if we need to flip a card and record it
+		const flippedCard = this.flipTopCardIfNeededAndRecord(sourcePile);
+		if (flippedCard) {
+			move.flippedCard = flippedCard;
+		}
 
 		// Check win condition
 		this.checkWinCondition();
@@ -307,8 +375,11 @@ export class Game {
 		// Add move to history
 		this.moves.push(move);
 
-		// Check if we need to flip a card
-		this.flipTopCardIfNeeded(sourcePile);
+		// Check if we need to flip a card and record it
+		const flippedCard = this.flipTopCardIfNeededAndRecord(sourcePile);
+		if (flippedCard) {
+			move.flippedCard = flippedCard;
+		}
 
 		// Check win condition
 		this.checkWinCondition();
@@ -386,6 +457,35 @@ export class Game {
 			}
 		}
 	}
+	
+	// Flip the top card of a pile if needed and return the flipped card
+	flipTopCardIfNeededAndRecord(pile) {
+		// Get card flipping rules from game rules
+		const flipRules = this.gameRules.getCardFlippingRules();
+		
+		// Check if this pile type has flipping rules
+		if (!flipRules[pile.type]) {
+			return null;
+		}
+		
+		const pileRules = flipRules[pile.type];
+		
+		// Check if we should flip on move
+		if (pileRules.flipOnMove && pile.cards.length > 0) {
+			const topCard = pile.getTopCard();
+			
+			// Check the flip condition
+			if (pileRules.flipCondition === 'faceDown' && !topCard.isFaceUp) {
+				topCard.flip();
+				return topCard; // Return the card that was flipped
+			} else if (pileRules.flipCondition === 'always') {
+				topCard.flip();
+				return topCard; // Return the card that was flipped
+			}
+		}
+		
+		return null; // No card was flipped
+	}
 
 	// Draw a card from stock to waste
 	drawFromStock() {
@@ -421,11 +521,17 @@ export class Game {
 				this.redealWasteToStock();
 			}
 		} else {
-			console.log('Drawing card from stock...');
-			const card = stockPile.removeTopCard();
-			card.isFaceUp = stockRules.faceUpOnDraw;
-			wastePile.addCard(card);
-			console.log('Card drawn and added to waste:', card.getShortDisplay());
+			console.log('Drawing card(s) from stock...');
+			const cardsToDrawCount = Math.min(stockRules.cardsPerDraw, stockPile.cards.length);
+			
+			for (let i = 0; i < cardsToDrawCount; i++) {
+				const card = stockPile.removeTopCard();
+				card.isFaceUp = stockRules.faceUpOnDraw;
+				wastePile.addCard(card);
+				console.log('Card drawn and added to waste:', card.getShortDisplay());
+			}
+			
+			console.log(`Drew ${cardsToDrawCount} card(s) from stock`);
 		}
 	}
 
@@ -504,6 +610,11 @@ export class Game {
 		
 		// Check if we need to flip a card back
 		this.flipTopCardIfNeeded(lastMove.fromPile);
+		
+		// Revert any card that was flipped during the original move
+		if (lastMove.flippedCard) {
+			lastMove.flippedCard.flip(); // Flip it back to its original state
+		}
 
 		return true;
 	}

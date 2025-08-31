@@ -26,6 +26,13 @@
 			description: 'A tarot-deck variant created by Zachtronics; can you order the larger deck with limited degrees of freedom?',
 			icon: '🔮',
 			rules: 'Build same-suit stacks in ascending or descending order, Major Arcana can go into the foundation starting at both 0 and 21'
+		},
+		{
+			id: 'sawayama',
+			name: 'Sawayama',
+			description: 'Another Zachtronics-created variant: when the draw pile is empty, it becomes a free cell',
+			icon: '⛰️',
+			rules: 'Build foundation piles by suit; draw-3, no recirculation, but the empty draw pile becomes a free cell; all cards dealt face-up, any card can occupy an empty tableau slot'
 		}
 	];
 	

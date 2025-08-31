@@ -4,6 +4,34 @@ export class FortunesFoundationRules extends GameRules {
 	constructor(deckConfig) {
 		super(deckConfig);
 	}
+
+	// Configure blocking conditions for Fortune's Foundation
+	getBlockingConditions() {
+		return {
+			// Use custom blocking for foundation piles since we need pile-specific logic
+			foundation: [
+				{
+					type: 'custom',
+					name: 'minorArcanaFreeCellBlocking',
+					description: 'Minor Arcana foundation moves (piles 0-3) are blocked when free cell is not empty'
+				}
+			]
+		};
+	}
+
+	// Custom blocking condition evaluation for Fortune's Foundation
+	evaluateCustomBlockingCondition(condition, gameState, targetPile = null) {
+		if (condition.name === 'minorArcanaFreeCellBlocking') {
+			// Only block foundation piles 0-3 (Minor Arcana)
+			if (targetPile && targetPile.type === 'foundation' && targetPile.index < 4) {
+				const freeCellPiles = gameState.piles.filter(p => p.type === 'freecell');
+				return freeCellPiles.some(pile => !pile.isEmpty());
+			}
+			return false; // Don't block Major Arcana foundations (indices 4-5)
+		}
+		
+		return super.evaluateCustomBlockingCondition(condition, gameState, targetPile);
+	}
 	
 	// Override pile configuration for Fortune's Foundation
 	getPileConfiguration() {
@@ -31,18 +59,53 @@ export class FortunesFoundationRules extends GameRules {
 		};
 	}
 	
-	// Override initial deal pattern with corrected positioning
-	getInitialDeal() {
+	// Override initial deal pattern with Fortune's Foundation rules
+	getDealPattern() {
 		return {
-			type: 'fortunes-foundation',
-			tableauPiles: 11,
-			emptyPileIndex: 5, // Empty pile at position 5
-			tableauCardsPerPile: 7,   // 7 cards per non-empty pile
-			stockPile: 0,      // No stock pile
-			wastePile: 0       // No waste pile
+			type: 'sequential',
+			piles: ['tableau', 'foundation', 'freecell'],
+			faceUp: [true, true, true],
+			distribution: 'custom',
+			tableau: {
+				piles: 11,
+				cardsPerPile: [7, 7, 7, 7, 7, 0, 7, 7, 7, 7, 7], // Pile 5 (index 5) is empty
+				faceUp: [true, true, true, true, true, true, true, true, true, true, true],
+				aceRedirection: {
+					enabled: true,
+					condition: 'isMinorArcana() && rank === 1',
+					targetPileType: 'foundation',
+					suitMapping: {
+						'wands': 0,
+						'cups': 1, 
+						'swords': 2,
+						'pentacles': 3
+					}
+				}
+			},
+			foundation: {
+				piles: 6, // 4 Minor Arcana + 2 Major Arcana
+				cardsPerPile: [0, 0, 0, 0, 0, 0], // Will be populated by ace redirection
+				faceUp: [true, true, true, true, true, true]
+			},
+			freecell: {
+				piles: 1,
+				cardsPerPile: [0], // Empty initially
+				faceUp: [true]
+			},
+			stock: {
+				piles: 0,
+				cardsPerPile: [],
+				faceUp: []
+			},
+			waste: {
+				piles: 0,
+				cardsPerPile: [],
+				faceUp: []
+			}
 		};
 	}
 	
+
 	// Override canCardBeMovedFromPile for Fortune's Foundation
 	canCardBeMovedFromPile(card, sourcePile, gameState) {
 		// In Fortune's Foundation, cards can be moved from any pile if they're the top card
@@ -97,9 +160,15 @@ export class FortunesFoundationRules extends GameRules {
 		const rankDiff = Math.abs(card.rank - topCard.rank);
 		return rankDiff === 1; // Consecutive (ascending or descending)
 	}
-	
-	// Override foundation move validation
+
+	// Override foundation move validation using the generalized blocking system
 	isValidFoundationMove(card, targetPile, gameState) {
+		console.log('FortunesFoundationRules.isValidFoundationMove called with:', {
+			card: card ? card.getShortDisplay() : 'null',
+			targetPileType: targetPile.type,
+			targetPileIndex: targetPile.index
+		});
+		
 		if (targetPile.type !== 'foundation') return false;
 		
 		const pileIndex = targetPile.index;
@@ -108,8 +177,11 @@ export class FortunesFoundationRules extends GameRules {
 			// Minor Arcana foundations (0-3)
 			if (!card.isMinorArcana()) return false;
 			
-			// Check if free cell is blocking
-			if (this.isFreeCellBlocking(gameState)) return false;
+			// Check blocking conditions using the generalized system
+			if (this.isPileTypeBlocked('foundation', gameState, targetPile)) {
+				console.log('Foundation move blocked by blocking conditions');
+				return false;
+			}
 			
 			// Must be ascending from Ace
 			const topCard = targetPile.getTopCard();
@@ -136,13 +208,7 @@ export class FortunesFoundationRules extends GameRules {
 			}
 		}
 	}
-	
-	// Check if free cell is blocking Minor Arcana foundation moves
-	isFreeCellBlocking(gameState) {
-		const freeCellPiles = gameState.piles.filter(p => p.type === 'freecell');
-		return freeCellPiles.some(pile => !pile.isEmpty());
-	}
-	
+
 	// Override move validation for Fortune's Foundation
 	isValidMove(card, targetPile, gameState) {
 		console.log('FortunesFoundationRules.isValidMove called with:', {
@@ -250,11 +316,8 @@ export class FortunesFoundationRules extends GameRules {
 	getWinConditions() {
 		return [
 			{
-				type: 'foundationComplete',
-				pileType: 'foundation',
-				required: 'all',
-				cardsPerPile: 'variable', // Different piles have different target sizes
-				description: 'All foundation piles must be complete'
+				type: 'custom',
+				description: 'All foundation piles must be complete with correct card counts'
 			}
 		];
 	}
@@ -284,5 +347,34 @@ export class FortunesFoundationRules extends GameRules {
 				flipCondition: 'never'
 			}
 		};
+	}
+
+	// Override custom win condition check for Fortune's Foundation
+	checkCustomWinCondition(condition, gameState) {
+		const foundationPiles = gameState.piles.filter(p => p.type === 'foundation');
+		
+		// Check Minor Arcana foundations (piles 0-3) - should have 13 cards each (Ace through King, no Knights)
+		for (let i = 0; i < 4; i++) {
+			const pile = foundationPiles.find(p => p.index === i);
+			if (!pile || pile.cards.length !== 13) {
+				return false;
+			}
+		}
+		
+		// Check Major Arcana foundations (piles 4-5) - should have 22 cards total between them
+		const majorPile4 = foundationPiles.find(p => p.index === 4);
+		const majorPile5 = foundationPiles.find(p => p.index === 5);
+		
+		if (!majorPile4 || !majorPile5) {
+			return false;
+		}
+		
+		const totalMajorArcana = majorPile4.cards.length + majorPile5.cards.length;
+		if (totalMajorArcana !== 22) {
+			return false;
+		}
+		
+		// All foundation piles are complete
+		return true;
 	}
 }

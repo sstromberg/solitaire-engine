@@ -1034,4 +1034,371 @@ jobs:
 - Easy rollback capabilities
 - Automated testing integration
 
+## **Phase 6: Advanced Features & Polish - Mouse and Keyboard Bindings**
+
+### **User Stories:**
+- **US-020**: As a player, I want to double-click T cards to move them to foundation piles so that I can quickly complete obvious moves
+- **US-021**: As a player, I want to use number keys to select tableau piles so that I can navigate efficiently in games with many piles
+- **US-022**: As a player, I want to use the spacebar for auto-completion when the game is solved so that I can finish quickly
+
+### **Technical Tasks - Mouse and Keyboard Bindings:**
+
+#### **1. Double-Click to Foundation (T Cards Only)**
+**Function**: `handleCardDoubleClick(event)`
+**Location**: After `handleCardClick` function in GameBoard.svelte
+**Purpose**: Move T cards (top cards) directly to appropriate foundation piles
+**Logic**:
+```javascript
+function handleCardRightClick(event) {
+    event.stopPropagation();
+    const { card } = event.detail;
+    
+    // Only handle T cards (top cards that can be moved)
+    if (!card || !game) return;
+    
+    const sourcePile = game.findCardPile(card);
+    if (!sourcePile) return;
+    
+    // Check if this is a T card (top card of its pile)
+    const isTopCard = sourcePile.getTopCard() === card;
+    if (!isTopCard) return;
+    
+    // Find foundation piles that can accept this card
+    const foundationPiles = game.piles.filter(p => p.type === 'foundation');
+    let targetFoundation = null;
+    
+    for (const foundation of foundationPiles) {
+        if (game.isValidMove(card, foundation)) {
+            targetFoundation = foundation;
+            break;
+        }
+    }
+    
+    if (targetFoundation) {
+        // Make the move and update game state
+        const moveResult = game.makeMove(card, targetFoundation);
+        if (moveResult) {
+            selectedCard = null;
+            validTargets = [];
+            // Update gameState store
+        }
+    }
+}
+```
+
+#### **2. Keyboard Tableau Pile Selection**
+**Function**: `selectTableauPileByKey(keyNumber)`
+**Location**: After `handleCardRightClick` function in GameBoard.svelte
+**Purpose**: Select T cards from specific tableau piles using number keys
+**Key Mapping**:
+- Keys 1-9: Select tableau piles 0-8 (index 0-7)
+- Key 0: Select tableau pile 9 (index 9) - 10th pile
+- Key Q: Select tableau pile 10 (index 10) - 11th pile
+- Key W: Select tableau pile 11 (index 11) - 12th pile
+- Key E: Select tableau pile 12 (index 12) - 13th pile
+- Key R: Select tableau pile 13 (index 13) - 14th pile
+
+**Logic**:
+```javascript
+function selectTableauPileByKey(keyNumber) {
+    if (!game) return;
+    
+    // Convert key number to pile index
+    let pileIndex;
+    if (keyNumber === 0) {
+        pileIndex = 9; // 0 key selects 10th pile (index 9)
+    } else if (keyNumber >= 1 && keyNumber <= 9) {
+        pileIndex = keyNumber - 1; // 1-9 keys select piles 0-8
+    } else if (keyNumber === 10) { // Q key
+        pileIndex = 9;
+    } else if (keyNumber === 11) { // W key
+        pileIndex = 10;
+    } else if (keyNumber === 12) { // E key
+        pileIndex = 11;
+    } else if (keyNumber === 13) { // R key
+        pileIndex = 12;
+    } else {
+        return; // Invalid key number
+    }
+    
+    // Find the tableau pile and select its top card
+    const tableauPile = game.piles.find(p => p.type === 'tableau' && p.index === pileIndex);
+    if (!tableauPile || tableauPile.isEmpty()) return;
+    
+    const topCard = tableauPile.getTopCard();
+    if (!topCard || !topCard.isFaceUp) return;
+    
+    // Select the top card
+    selectedCard = topCard;
+    validTargets = game.gameRules.getValidTargets(topCard, game);
+}
+```
+
+#### **3. Spacebar Auto-Complete**
+**Function**: `handleAutoComplete()`
+**Location**: After `selectTableauPileByKey` function in GameBoard.svelte
+**Purpose**: Automatically move all accessible cards to foundation when game is "solved"
+**Trigger Conditions**:
+- All stock piles are empty
+- All cards in other piles are face-up (accessible)
+- No more strategic moves needed
+
+**Logic**:
+```javascript
+function handleAutoComplete() {
+    if (!game) return;
+    
+    // Check if all cards are accessible (T or S) and no cards are face down or in stock
+    const allCardsAccessible = game.piles.every(pile => {
+        if (pile.type === 'stock') {
+            return pile.isEmpty(); // Stock should be empty
+        }
+        // All cards in other piles should be face up
+        return pile.cards.every(card => card.isFaceUp);
+    });
+    
+    if (!allCardsAccessible) return;
+    
+    // Iteratively move T cards to foundation until no more moves possible
+    let movesMade = 0;
+    let hasValidMoves = true;
+    
+    while (hasValidMoves) {
+        hasValidMoves = false;
+        
+        // Find all T cards that can be moved to foundation
+        for (const pile of game.piles) {
+            if (pile.type === 'stock' || pile.isEmpty()) continue;
+            
+            const topCard = pile.getTopCard();
+            if (!topCard || !topCard.isFaceUp) continue;
+            
+            // Check if this card can be moved to any foundation pile
+            const foundationPiles = game.piles.filter(p => p.type === 'foundation');
+            for (const foundation of foundationPiles) {
+                if (game.isValidMove(topCard, foundation)) {
+                    const moveResult = game.makeMove(topCard, foundation);
+                    if (moveResult) {
+                        movesMade++;
+                        hasValidMoves = true;
+                        // Update gameState store after each move
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Clear selection after auto-complete
+    selectedCard = null;
+    validTargets = [];
+}
+```
+
+#### **4. Global Keyboard Event Listener**
+**Location**: Inside `onMount` function in GameBoard.svelte
+**Purpose**: Capture keyboard events globally for the game
+**Event Handling**:
+```javascript
+onMount(() => {
+    // ... existing onMount logic ...
+    
+    // Add global keyboard event listener
+    const handleKeyDown = (event) => {
+        // Only handle keyboard shortcuts when game is active and no input fields are focused
+        if (!gameStarted || !game || document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+            return;
+        }
+        
+        // Number keys for tableau pile selection
+        if (event.key >= '0' && event.key <= '9') {
+            event.preventDefault();
+            selectTableauPileByKey(parseInt(event.key));
+        }
+        // Q key for 10th tableau pile (index 9)
+        else if (event.key.toLowerCase() === 'q') {
+            event.preventDefault();
+            selectTableauPileByKey(10);
+        }
+        // W key for 11th tableau pile (index 10)
+        else if (event.key.toLowerCase() === 'w') {
+            event.preventDefault();
+            selectTableauPileByKey(11);
+        }
+        // E key for 12th tableau pile (index 11)
+        else if (event.key.toLowerCase() === 'e') {
+            event.preventDefault();
+            selectTableauPileByKey(12);
+        }
+        // R key for 13th tableau pile (index 12)
+        else if (event.key.toLowerCase() === 'r') {
+            event.preventDefault();
+            selectTableauPileByKey(13);
+        }
+        // Spacebar for auto-complete
+        else if (event.key === ' ') {
+            event.preventDefault();
+            handleAutoComplete();
+        }
+    };
+    
+    document.addEventListener('keydown', handleKeyDown);
+    
+    // Cleanup function
+    return () => {
+        document.removeEventListener('keydown', handleKeyDown);
+    };
+});
+```
+
+#### **5. Wire Up Double-Click Events**
+**Location**: Template section in GameBoard.svelte
+**Purpose**: Add `on:dblclick={handleCardDoubleClick}` to all Card components
+**Components to Update**:
+- Foundation pile cards
+- Tableau pile cards (all stacked cards)
+- Free cell cards
+- Waste pile cards
+
+### **Implementation Order:**
+1. **Step 1**: Add double-click handler to Card.svelte ✅ (COMPLETED)
+2. **Step 2**: Add `handleCardDoubleClick` function to GameBoard.svelte ✅ (COMPLETED)
+3. **Step 3**: Add `selectTableauPileByKey` and `handleAutoComplete` functions ✅ (COMPLETED)
+4. **Step 4**: Add global keyboard event listener in `onMount` ✅ (COMPLETED)
+5. **Step 5**: Wire up `on:dblclick` events to all Card components ✅ (COMPLETED)
+
+### **Testing Strategy:**
+- Test double-click on T cards vs S cards
+- Test number key selection (1-9, 0, q, w, e, r)
+- Test spacebar auto-complete on solved games
+- Verify no conflicts with existing click handlers
+- Test keyboard shortcuts don't interfere with input fields
+- Test win condition display and "Play Again" button functionality
+- Test win state persistence across game type changes
+
 This deployment guide ensures your Svelte solitaire app can be easily built, tested, and deployed to production environments while maintaining the high quality and performance standards established during development.
+
+## **Phase 7: Accessibility & Advanced Keyboard Controls (Future)**
+
+### **Current Keyboard Controls Status**
+**✅ IMPLEMENTED:**
+- **Number keys (0-9)**: Select T card from corresponding tableau pile
+- **Q, W, E, R keys**: Select T card from 10th-13th tableau piles (for games with many tableau piles)
+- **Spacebar**: Auto-complete when game is solved (moves all accessible cards to foundation)
+
+**✅ IMPLEMENTED:**
+- **Double-click on T cards**: Move to appropriate foundation pile (if valid move exists)
+
+### **Accessibility Roadmap - Keyboard Controls**
+
+#### **High Priority (Essential for accessibility)**
+1. **Tab Navigation System**
+   - **Tab/Shift+Tab**: Navigate between interactive elements (foundations, tableau piles, free cells, stock)
+   - **Focus indicators**: Visual focus states for keyboard navigation
+   - **Skip links**: Jump to main game areas
+
+2. **Card Selection & Activation**
+   - **Arrow keys**: Navigate between cards within a pile when focused
+   - **Enter/Space**: Activate selected card (equivalent to left-click)
+   - **Escape**: Clear selection, return focus to game board
+
+3. **Game Information & Help**
+   - **H key**: Toggle "Help mode" - show valid moves for current selection
+   - **I key**: Toggle "Info mode" - show card details, pile counts, game statistics
+   - **? key**: Show context-sensitive help for current selection
+
+#### **Medium Priority (Significant improvement)**
+1. **Game Actions**
+   - **U key**: Undo last move
+   - **R key**: Reset/restart current game
+   - **N key**: Start new game
+   - **F key**: Auto-foundation (move all possible cards to foundation)
+
+2. **Pile Navigation**
+   - **A key**: Select first available foundation pile
+   - **Z key**: Select last available foundation pile
+   - **X key**: Select first available tableau pile
+   - **C key**: Select last available tableau pile
+
+3. **Advanced Selection**
+   - **Shift + Arrow keys**: Select multiple cards in a stack
+   - **Ctrl/Cmd + Arrow keys**: Move selected card(s) to adjacent pile
+
+#### **Lower Priority (Nice to have)**
+1. **Visual Accessibility**
+   - **L key**: Toggle "Large text mode" - increase card size
+   - **B key**: Toggle "High contrast mode" - enhance card visibility
+   - **M key**: Toggle "Motion reduction" - disable animations
+
+2. **Game Variant Management**
+   - **G key**: Switch between game variants (Klondike, FreeCell, Fortune's Foundation)
+   - **F1 key**: Show comprehensive help/controls reference
+   - **F2 key**: Show game rules reference
+
+### **Technical Implementation Considerations**
+
+#### **Focus Management Architecture**
+- **Focus vs Selection distinction**: 
+  - **Focus**: Keyboard navigation target (visual indicator)
+  - **Selection**: Game state (card ready for movement)
+- **Focus ring styling**: High contrast, visible focus indicators
+- **Focus trapping**: Keep focus within game boundaries
+
+#### **Screen Reader Support**
+- **ARIA labels**: Descriptive labels for all interactive elements
+- **Live regions**: Announce game state changes (moves, wins, errors)
+- **Semantic HTML**: Proper heading structure and landmarks
+- **State announcements**: "Card selected", "Move invalid", "Game won"
+
+#### **Keyboard Event Handling**
+- **Event delegation**: Centralized keyboard event management
+- **Modifier key support**: Shift, Ctrl, Cmd combinations
+- **Prevent default**: Avoid conflicts with browser shortcuts
+- **Accessibility shortcuts**: Don't override assistive technology
+
+### **User Experience Design**
+
+#### **Progressive Enhancement**
+- **Mouse users**: Full functionality with existing controls
+- **Keyboard users**: Complete game access without mouse
+- **Screen reader users**: Full game information and control
+- **Motor impairment users**: Alternative input methods supported
+
+#### **Learning Curve**
+- **Tooltips**: Show keyboard shortcuts on hover
+- **Help overlay**: Comprehensive controls reference (F1)
+- **Contextual help**: Show available actions for current selection
+- **Tutorial mode**: Guided introduction to keyboard controls
+
+### **Implementation Phases**
+
+#### **Phase 7A: Core Navigation (Weeks 1-2)**
+- Tab navigation between game elements
+- Arrow key navigation within piles
+- Enter/Space activation
+- Focus management system
+
+#### **Phase 7B: Game Actions (Weeks 3-4)**
+- U, R, N keys for game actions
+- A, Z, X, C keys for pile navigation
+- H, I, ? keys for help and information
+
+#### **Phase 7C: Advanced Features (Weeks 5-6)**
+- Multi-card selection
+- Visual accessibility toggles
+- Screen reader optimization
+- Comprehensive help system
+
+### **Testing & Validation**
+- **Keyboard-only testing**: Complete games using only keyboard
+- **Screen reader testing**: NVDA, JAWS, VoiceOver compatibility
+- **Accessibility audit**: WCAG 2.1 AA compliance
+- **User testing**: Players with various accessibility needs
+
+### **Success Metrics**
+- **Keyboard accessibility**: 100% game functionality via keyboard
+- **Screen reader compatibility**: Full game information accessible
+- **Focus management**: Clear, logical tab order
+- **User satisfaction**: Positive feedback from accessibility community
+
+This accessibility roadmap will transform the solitaire game from mouse-dependent to fully accessible, making it usable by players with various abilities and preferences while maintaining the polished experience for all users.

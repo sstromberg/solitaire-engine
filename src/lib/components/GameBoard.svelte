@@ -7,6 +7,7 @@
 	import { KlondikeRules } from '$lib/game/rules/KlondikeRules.js';
 	import { FreeCellRules } from '$lib/game/rules/FreeCellRules.js';
 	import { FortunesFoundationRules } from '$lib/game/rules/FortunesFoundationRules.js';
+	import { SawayamaRules } from '$lib/game/rules/SawayamaRules.js';
 	import { shouldShowDebug, shouldHighlightValidMoves, shouldLogToConsole } from '$lib/config/environment.js';
 	import Card from './Card.svelte';
 	
@@ -19,20 +20,6 @@
 	let showCardNotation = false; // Card notation toggle (nested under Debug Info)
 	let showNewGameConfirmation = false; // New game confirmation dialog
 	
-	// Initialize debug values from environment
-	onMount(() => {
-		if (import.meta.env.DEV) {
-			showDebugInfo = true;
-			showValidMoves = true;
-			showSolvabilityInfo = true;
-			showCardNotation = true;
-		}
-	});
-	
-	// Auto-enable card notation for Fortune's Foundation (tarot games benefit from notation)
-	$: if (gameType === 'fortunes-foundation') {
-		showCardNotation = true;
-	}
 
 	// Simple solvability check (automatic)
 	let isPositionWinnable = true;
@@ -74,6 +61,7 @@
 			case 'klondike': return 'KlondikeRules';
 			case 'freecell': return 'FreeCellRules';
 			case 'fortunes-foundation': return 'FortunesFoundationRules';
+			case 'sawayama': return 'SawayamaRules';
 			default: return 'KlondikeRules';
 		}
 	}
@@ -98,6 +86,14 @@
 	}
 	
 	onMount(() => {
+		// Initialize debug values from environment
+		if (import.meta.env.DEV) {
+			showDebugInfo = true;
+			showValidMoves = true;
+			showSolvabilityInfo = true;
+			showCardNotation = true;
+		}
+		
 		console.log('GameBoard onMount called with gameType:', gameType);
 		
 		updateDeckConfig();
@@ -112,6 +108,51 @@
 		} else {
 			console.log('No gameType provided, skipping game start');
 		}
+		
+		// Add global keyboard event listener
+		const handleKeyDown = (event) => {
+			// Only handle keyboard shortcuts when game is active and no input fields are focused
+			if (!gameStarted || !game || document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+				return;
+			}
+			
+			// Number keys for tableau pile selection
+			if (event.key >= '0' && event.key <= '9') {
+				event.preventDefault();
+				selectTableauPileByKey(parseInt(event.key));
+			}
+			// Q key for 10th tableau pile (index 9)
+			else if (event.key.toLowerCase() === 'q') {
+				event.preventDefault();
+				selectTableauPileByKey(10);
+			}
+			// W key for 11th tableau pile (index 10)
+			else if (event.key.toLowerCase() === 'w') {
+				event.preventDefault();
+				selectTableauPileByKey(11);
+			}
+			// E key for 12th tableau pile (index 11)
+			else if (event.key.toLowerCase() === 'e') {
+				event.preventDefault();
+				selectTableauPileByKey(12);
+			}
+			// R key for 13th tableau pile (index 12)
+			else if (event.key.toLowerCase() === 'r') {
+				event.preventDefault();
+				selectTableauPileByKey(13);
+			}
+			// Spacebar for auto-complete
+			else if (event.key === ' ') {
+				event.preventDefault();
+				handleAutoComplete();
+			}
+		};
+		
+		document.addEventListener('keydown', handleKeyDown);
+		// Cleanup function
+		return () => {
+			document.removeEventListener('keydown', handleKeyDown);
+		};
 	});
 	
 	function startNewGame() {
@@ -128,6 +169,10 @@
 			console.log('Creating Fortune\'s Foundation game');
 			deck = new TarotDeck();
 			gameRules = new FortunesFoundationRules(deck);
+		} else if (gameType === 'sawayama') {
+			console.log('Creating Sawayama game');
+			deck = new StandardDeck();
+			gameRules = new SawayamaRules(deck);
 		} else {
 			console.log('Creating Klondike game (default)');
 			// Default to Klondike
@@ -154,6 +199,7 @@
 			piles: [...game.piles],
 			score: game.score,
 			moves: [...game.moves],
+			gameWon: false, // Ensure win state is cleared
 			lastUpdate: Date.now() // Force reactivity
 		}));
 	}
@@ -229,11 +275,210 @@
 		}
 	}
 	
-
+	function handleCardDoubleClick(event) {
+		event.stopPropagation();
+		const { card } = event.detail;
+		
+		if (shouldLogToConsole()) {
+			console.log('Card double-clicked:', card ? card.getShortDisplay() : 'none');
+		}
+		
+		// Only handle T cards (top cards that can be moved)
+		if (!card || !game) return;
+		
+		const sourcePile = game.findCardPile(card);
+		if (!sourcePile) return;
+		
+		// Check if this is a T card (top card of its pile)
+		const isTopCard = sourcePile.getTopCard() === card;
+		if (!isTopCard) {
+			if (shouldLogToConsole()) {
+				console.log('Double-click ignored - not a T card');
+			}
+			return;
+		}
+		
+		// Find foundation piles that can accept this card
+		const foundationPiles = game.piles.filter(p => p.type === 'foundation');
+		let targetFoundation = null;
+		
+		for (const foundation of foundationPiles) {
+			if (game.isValidMove(card, foundation)) {
+				targetFoundation = foundation;
+				break;
+			}
+		}
+		
+		if (targetFoundation) {
+			if (shouldLogToConsole()) {
+				console.log('Double-click: Moving T card', card.getShortDisplay(), 'to foundation pile', targetFoundation.index);
+			}
+			
+			// Make the move
+			try {
+				const moveResult = game.makeMove(card, targetFoundation);
+				if (moveResult) {
+					// Clear selection and update store
+					selectedCard = null;
+					validTargets = [];
+					
+					gameState.update(state => ({
+						...state,
+						piles: [...game.piles],
+						score: game.score,
+						moves: [...game.moves],
+						gameWon: game.gameWon,
+						lastUpdate: Date.now()
+					}));
+					
+					if (shouldLogToConsole()) {
+						console.log('Double-click move completed successfully');
+					}
+				}
+			} catch (error) {
+				if (shouldLogToConsole()) {
+					console.error('Error during double-click move:', error);
+				}
+			}
+		} else {
+			if (shouldLogToConsole()) {
+				console.log('Double-click: No valid foundation move available for', card.getShortDisplay());
+			}
+		}
+	}
 	
-
+	function selectTableauPileByKey(keyNumber) {
+		if (!game) return;
+		
+		// Convert key number to pile index (0-9 for keys 0-9, 10+ for q,w,e,r)
+		let pileIndex;
+		if (keyNumber === 0) {
+			pileIndex = 9; // 0 key selects 10th pile (index 9)
+		} else if (keyNumber >= 1 && keyNumber <= 9) {
+			pileIndex = keyNumber - 1; // 1-9 keys select piles 0-8
+		} else if (keyNumber === 10) {
+			pileIndex = 9; // Q key selects 10th pile (index 9)
+		} else if (keyNumber === 11) {
+			pileIndex = 10; // W key selects 11th pile (index 10)
+		} else if (keyNumber === 12) {
+			pileIndex = 11; // E key selects 12th pile (index 11)
+		} else if (keyNumber === 13) {
+			pileIndex = 12; // R key selects 13th pile (index 12)
+		} else {
+			return; // Invalid key number
+		}
+		
+		// Find the tableau pile at this index
+		const tableauPile = game.piles.find(p => p.type === 'tableau' && p.index === pileIndex);
+		if (!tableauPile || tableauPile.isEmpty()) {
+			if (shouldLogToConsole()) {
+				console.log(`No tableau pile at index ${pileIndex} or pile is empty`);
+			}
+			return;
+		}
+		
+		// Get the top card of the pile
+		const topCard = tableauPile.getTopCard();
+		if (!topCard || !topCard.isFaceUp) {
+			if (shouldLogToConsole()) {
+				console.log(`No face-up top card in tableau pile ${pileIndex}`);
+			}
+			return;
+		}
+		
+		// Select the top card
+		selectedCard = topCard;
+		validTargets = game.gameRules.getValidTargets(topCard, game);
+		
+		if (shouldLogToConsole()) {
+			console.log(`Selected tableau pile ${pileIndex} (${keyNumber === 0 ? '0 key' : keyNumber <= 9 ? keyNumber + ' key' : ['q', 'w', 'e', 'r'][keyNumber - 10] + ' key'}):`, topCard.getShortDisplay());
+		}
+	}
 	
-
+	function handleAutoComplete() {
+		if (!game) return;
+		
+		if (shouldLogToConsole()) {
+			console.log('Auto-complete triggered by spacebar');
+		}
+		
+		// Check if all cards are accessible (T or S) and no cards are face down or in stock
+		const allCardsAccessible = game.piles.every(pile => {
+			if (pile.type === 'stock') {
+				// Stock should be empty
+				return pile.isEmpty();
+			}
+			
+			// All cards in other piles should be face up
+			return pile.cards.every(card => card.isFaceUp);
+		});
+		
+		if (!allCardsAccessible) {
+			if (shouldLogToConsole()) {
+				console.log('Auto-complete: Not all cards are accessible');
+			}
+			return;
+		}
+		
+		// Check if there are any valid moves to foundation
+		let movesMade = 0;
+		let hasValidMoves = true;
+		
+		while (hasValidMoves) {
+			hasValidMoves = false;
+			
+			// Find all T cards that can be moved to foundation
+			for (const pile of game.piles) {
+				if (pile.type === 'stock' || pile.isEmpty()) continue;
+				
+				const topCard = pile.getTopCard();
+				if (!topCard || !topCard.isFaceUp) continue;
+				
+				// Check if this card can be moved to any foundation pile
+				const foundationPiles = game.piles.filter(p => p.type === 'foundation');
+				for (const foundation of foundationPiles) {
+					if (game.isValidMove(topCard, foundation)) {
+						// Make the move
+						try {
+							const moveResult = game.makeMove(topCard, foundation);
+							if (moveResult) {
+								movesMade++;
+								hasValidMoves = true;
+								
+								if (shouldLogToConsole()) {
+									console.log(`Auto-complete: Moved ${topCard.getShortDisplay()} to foundation pile ${foundation.index}`);
+								}
+								
+								// Update store after each move
+								gameState.update(state => ({
+									...state,
+									piles: [...game.piles],
+									score: game.score,
+									moves: [...game.moves],
+									gameWon: game.gameWon,
+									lastUpdate: Date.now()
+								}));
+								
+								break; // Move to next pile
+							}
+						} catch (error) {
+							if (shouldLogToConsole()) {
+								console.error('Error during auto-complete move:', error);
+							}
+						}
+					}
+				}
+			}
+		}
+		
+		// Clear selection after auto-complete
+		selectedCard = null;
+		validTargets = [];
+		
+		if (shouldLogToConsole()) {
+			console.log(`Auto-complete completed: ${movesMade} moves made`);
+		}
+	}
 	
 	function handlePileClick(pile) {
 		if (shouldLogToConsole()) {
@@ -356,7 +601,8 @@
 			game.drawFromStock();
 			gameState.update(state => ({
 				...state,
-				piles: game.piles
+				piles: game.piles,
+				gameWon: game.gameWon // Update win state after drawing from stock
 			}));
 		}
 	}
@@ -368,6 +614,7 @@
 				piles: [...game.piles],
 				score: game.score,
 				moves: [...game.moves],
+				gameWon: game.gameWon, // Update win state after undo
 				lastUpdate: Date.now() // Force reactivity
 			}));
 		}
@@ -404,8 +651,8 @@
 <div class="game-board">
 	{#if gameStarted}
 		<div class="game-layout">
-						<!-- Foundation and Free Cells area (top) - for FreeCell and Fortune's Foundation -->
-			{#if gameType === 'freecell' || gameType === 'fortunes-foundation'}
+						<!-- Foundation and Free Cells area (top) - for games with free cells -->
+			{#if game && game.gameRules && ((game.gameRules.getFreeCellCount && game.gameRules.getFreeCellCount() > 0) || (game.gameRules.getPileConfiguration && game.gameRules.getPileConfiguration().freecell?.create))}
 				<div class="foundation-freecell-area">
 					<!-- Foundation area (left) -->
 					<div class="foundation-area">
@@ -434,27 +681,30 @@
 												showCardNotation={showCardNotation}
 												gameRules={game ? game.gameRules : null}
 												on:click={handleCardClick}
+												on:dblclick={handleCardDoubleClick}
 											/>
+										{/if}
+
+										<!-- Generalized blocking overlay for foundation piles -->
+										{#if game && game.gameRules}
+											{@const blockingStatus = game.gameRules.getBlockingStatusForPile(pile, $gameState)}
+											{#if blockingStatus.isBlocked}
+												<div class="foundation-lock-overlay">
+													<div class="lock-icon">{blockingStatus.icon}</div>
+													<div class="lock-text">Blocked</div>
+													<div class="lock-tooltip">
+														<div class="tooltip-content">
+															<strong>Foundation Blocked</strong><br>
+															{blockingStatus.description}
+														</div>
+													</div>
+												</div>
+											{/if}
 										{/if}
 									</div>
 								{/each}
-								
-								<!-- Lock overlay when free cell is occupied -->
-								{#if $gameState.piles.some(p => p.type === 'freecell' && !p.isEmpty())}
-									<div class="foundation-lock-overlay">
-										<div class="lock-icon">🔒</div>
-										<div class="lock-text">Locked</div>
-										<div class="lock-tooltip">
-											<div class="tooltip-content">
-												<strong>Foundation Locked</strong><br>
-												Minor Arcana cards cannot be placed in foundation piles while the free cell is occupied.
-											</div>
-										</div>
-									</div>
-								{/if}
-							</div>
-							
-							<!-- Major Arcana foundations (bottom row) -->
+
+							</div>							<!-- Major Arcana foundations (bottom row) -->
 							<div class="foundation-row major-arcana">
 								{#each $gameState.piles.filter(p => p.type === 'foundation' && p.index >= 4) as pile, pileIndex}
 									<div 
@@ -479,9 +729,27 @@
 														showCardNotation={showCardNotation}
 														gameRules={game ? game.gameRules : null}
 														on:click={handleCardClick}
+														on:dblclick={handleCardDoubleClick}
 													/>
 												</div>
 											{/each}
+										{/if}
+
+										<!-- Generalized blocking overlay for major arcana foundation piles -->
+										{#if game && game.gameRules}
+											{@const blockingStatus = game.gameRules.getBlockingStatusForPile(pile, $gameState)}
+											{#if blockingStatus.isBlocked}
+												<div class="foundation-lock-overlay">
+													<div class="lock-icon">{blockingStatus.icon}</div>
+													<div class="lock-text">Blocked</div>
+													<div class="lock-tooltip">
+														<div class="tooltip-content">
+															<strong>Foundation Blocked</strong><br>
+															{blockingStatus.description}
+														</div>
+													</div>
+												</div>
+											{/if}
 										{/if}
 									</div>
 								{/each}
@@ -507,7 +775,25 @@
 												showCardNotation={showCardNotation}
 												gameRules={game ? game.gameRules : null}
 												on:click={handleCardClick}
+												on:dblclick={handleCardDoubleClick}
 											/>
+										{/if}
+
+										<!-- Generalized blocking overlay for foundation piles -->
+										{#if game && game.gameRules}
+											{@const blockingStatus = game.gameRules.getBlockingStatusForPile(pile, $gameState)}
+											{#if blockingStatus.isBlocked}
+												<div class="foundation-lock-overlay">
+													<div class="lock-icon">{blockingStatus.icon}</div>
+													<div class="lock-text">Blocked</div>
+													<div class="lock-tooltip">
+														<div class="tooltip-content">
+															<strong>Foundation Blocked</strong><br>
+															{blockingStatus.description}
+														</div>
+													</div>
+												</div>
+											{/if}
 										{/if}
 									</div>
 								{/each}
@@ -542,7 +828,25 @@
 											cardIndex={pile.cards.length - 1}
 											gameState={$gameState}
 											on:click={handleCardClick}
+											on:dblclick={handleCardDoubleClick}
 										/>
+									{/if}
+
+									<!-- Generalized blocking overlay for free cells -->
+									{#if game && game.gameRules}
+										{@const blockingStatus = game.gameRules.getBlockingStatusForPile(pile, $gameState)}
+										{#if blockingStatus.isBlocked}
+											<div class="foundation-lock-overlay">
+												<div class="lock-icon">{blockingStatus.icon}</div>
+												<div class="lock-text">Blocked</div>
+												<div class="lock-tooltip">
+													<div class="tooltip-content">
+														<strong>Free Cell Blocked</strong><br>
+														{blockingStatus.description}
+													</div>
+												</div>
+											</div>
+										{/if}
 									{/if}
 								</div>
 							{/each}
@@ -567,14 +871,32 @@
 								{#if pile.isEmpty()}
 									<div class="pile-placeholder">+</div>
 								{:else}
-									<Card 
-										card={pile.getTopCard()}
-										isSelected={selectedCard === pile.getTopCard()}
-										showDebugInfo={showDebugInfo}
-										showCardNotation={showCardNotation}
-										gameRules={game ? game.gameRules : null}
-										on:click={handleCardClick}
-									/>
+																	<Card 
+									card={pile.getTopCard()}
+									isSelected={selectedCard === pile.getTopCard()}
+									showDebugInfo={showDebugInfo}
+									showCardNotation={showCardNotation}
+									gameRules={game ? game.gameRules : null}
+									on:click={handleCardClick}
+									on:dblclick={handleCardDoubleClick}
+								/>
+								{/if}
+
+								<!-- Generalized blocking overlay for foundation piles -->
+								{#if game && game.gameRules}
+									{@const blockingStatus = game.gameRules.getBlockingStatusForPile(pile, $gameState)}
+									{#if blockingStatus.isBlocked}
+										<div class="foundation-lock-overlay">
+											<div class="lock-icon">{blockingStatus.icon}</div>
+											<div class="lock-text">Blocked</div>
+											<div class="lock-tooltip">
+												<div class="tooltip-content">
+													<strong>Foundation Blocked</strong><br>
+													{blockingStatus.description}
+												</div>
+											</div>
+										</div>
+									{/if}
 								{/if}
 							</div>
 						{/each}
@@ -616,6 +938,7 @@
 											cardIndex={cardIndex}
 											gameState={$gameState}
 											on:click={handleCardClick}
+											on:dblclick={handleCardDoubleClick}
 										/>
 									</div>
 								{/each}
@@ -625,8 +948,8 @@
 				</div>
 			</div>
 			
-			<!-- Stock and waste area (bottom) - only for Klondike -->
-			{#if gameType === 'klondike'}
+			<!-- Stock and waste area (bottom) - for games with stock and waste piles -->
+			{#if game && game.gameRules && game.gameRules.getPileConfiguration && game.gameRules.getPileConfiguration().stock?.create}
 			<div class="stock-waste-area">
 				<div class="stock-area">
 					<div class="area-header">
@@ -666,6 +989,7 @@
 										showCardNotation={showCardNotation}
 										gameRules={game ? game.gameRules : null}
 										on:click={handleCardClick}
+										on:dblclick={handleCardDoubleClick}
 										/>
 								</div>
 							{/each}
@@ -682,7 +1006,7 @@
 				<h2>🎉 Congratulations! 🎉</h2>
 				<p>You've won {gameType === 'freecell' ? 'FreeCell' : gameType === 'fortunes-foundation' ? "Fortune's Foundation" : 'Klondike'} Solitaire!</p>
 				<p>Final Score: {$gameState.score}</p>
-				<button class="control-button" on:click={resetGame}>
+				<button class="control-button" on:click={confirmNewGame}>
 					Play Again
 				</button>
 			</div>
@@ -1233,7 +1557,6 @@
 	.foundation-row.minor-arcana {
 		justify-content: center;
 		gap: 15px;
-		position: relative; /* For positioning the lock overlay */
 	}
 	
 	/* Foundation lock overlay when free cell is occupied */
@@ -1418,6 +1741,7 @@
 		justify-content: center;
 		background: rgba(255, 255, 255, 0.05);
 		transition: all 0.2s ease;
+		position: relative; /* For positioning overlays */
 	}
 	
 	.pile:hover {

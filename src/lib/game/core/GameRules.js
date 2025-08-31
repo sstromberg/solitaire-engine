@@ -3,6 +3,119 @@ export class GameRules {
 		this.deckConfig = deckConfig;
 	}
 
+
+	// Configure game board and deal cards
+	getPileConfiguration() {
+		return {
+			foundation: {
+				count: this.getFoundationPileCount(),
+				create: true
+			},
+			tableau: {
+				count: this.getTableauPileCount(),
+				create: true
+			},
+			stock: {
+				count: 0, // Default: no stock pile
+				create: false
+			},
+			waste: {
+				count: 0, // Default: no waste pile
+				create: false
+			},
+			freecell: {
+				count: 0, // Default: no free cell piles
+				create: false
+			}
+		};
+	}
+
+	// Get the number of tableau piles for this game
+	getTableauPileCount() {
+		return this.deckConfig.getTableauPileCount();
+	}
+
+	// Get the number of foundation piles for this game
+	getFoundationPileCount() {
+		return this.deckConfig.getFoundationPileCount();
+	}
+
+	// Get deal pattern for this game variant
+	getDealPattern() {
+		return {
+			type: 'sequential', // 'sequential', 'random', 'pattern'
+			piles: ['tableau'], // Which pile types to deal to
+			faceUp: [true],     // Face-up state for each pile type
+			distribution: 'custom', // 'custom', 'standard', 'even'
+			tableau: {
+				piles: 7,        // Number of tableau piles
+				cardsPerPile: [1, 2, 3, 4, 5, 6, 7], // Cards per pile
+				faceUp: [true, true, true, true, true, true, true] // Face-up per pile
+			},
+			foundation: {
+				piles: 4,        // Number of foundation piles
+				cardsPerPile: [0, 0, 0, 0], // Cards per pile (usually 0 initially)
+				faceUp: [false, false, false, false] // Face-up per pile
+			},
+			stock: {
+				piles: 1,        // Number of stock piles
+				cardsPerPile: [24], // Cards per pile (remaining cards)
+				faceUp: [false]  // Face-up per pile
+			},
+			waste: {
+				piles: 1,        // Number of waste piles
+				cardsPerPile: [0], // Cards per pile (usually 0 initially)
+				faceUp: [false]  // Face-up per pile
+			},
+			freecell: {
+				piles: 0,        // Number of free cell piles
+				cardsPerPile: [], // Cards per pile
+				faceUp: []       // Face-up per pile
+			}
+		};
+	}
+
+	// NEW: Check if this game variant uses stock/waste piles
+	usesStockWaste() {
+		const dealPattern = this.getDealPattern();
+		return dealPattern.stock && dealPattern.stock.piles > 0 && 
+		       dealPattern.stock.cardsPerPile.some(count => count > 0) ||
+		       dealPattern.waste && dealPattern.waste.piles > 0;
+	}
+
+	// NEW: Get stock drawing rules
+	getStockDrawingRules() {
+		return {
+			cardsPerDraw: 1, // Default: draw 1 card at a time
+			redealWhenEmpty: true, // Default: redeal waste to stock
+			shuffleOnRedeal: true, // Default: shuffle on redeal
+			faceUpOnDraw: true, // Default: cards become face up when drawn
+			faceDownOnRedeal: true // Default: cards become face down when redealt
+		};
+	}
+
+	// NEW: Get card flipping rules
+	getCardFlippingRules() {
+		return {
+			tableau: {
+				flipOnEmpty: false, // Default: don't flip when tableau becomes empty
+				flipOnMove: true, // Default: flip top card when cards are moved
+				flipCondition: 'faceDown' // Default: flip only face-down cards
+			},
+			foundation: {
+				flipOnEmpty: false,
+				flipOnMove: false,
+				flipCondition: 'never'
+			},
+			stock: {
+				flipOnEmpty: false,
+				flipOnMove: false,
+				flipCondition: 'never'
+			}
+		};
+	}
+
+
 	// Check if a card can be placed on top of another card
 	canStackCards(card, targetCard) {
 		throw new Error('canStackCards must be implemented by subclass');
@@ -22,6 +135,166 @@ export class GameRules {
 	getValidTargets(card, gameState) {
 		throw new Error('getValidTargets must be implemented by subclass');
 	}
+
+	// Check if a move is valid (abstract - must be implemented by subclass)
+	isValidMove(card, targetPile, gameState) {
+		throw new Error('isValidMove must be implemented by subclass');
+	}
+
+	// NEW: Generalized blocking system
+	
+	// Get blocking conditions for different pile types
+	getBlockingConditions() {
+		// Override in subclasses to define blocking rules
+		// Returns an object where keys are pile types and values are blocking condition objects
+		return {};
+	}
+
+	// Check if a specific pile type is blocked based on game state
+	isPileTypeBlocked(pileType, gameState, targetPile = null) {
+		const blockingConditions = this.getBlockingConditions();
+		const conditions = blockingConditions[pileType];
+		
+		if (!conditions) {
+			return false; // No blocking conditions defined for this pile type
+		}
+		
+		// Check each blocking condition
+		for (const condition of conditions) {
+			if (this.evaluateBlockingCondition(condition, gameState, targetPile)) {
+				return true; // At least one blocking condition is active
+			}
+		}
+		
+		return false; // No blocking conditions are active
+	}
+
+	// Evaluate a single blocking condition
+	evaluateBlockingCondition(condition, gameState, targetPile = null) {
+		switch (condition.type) {
+			case 'pileNotEmpty':
+				return this.checkPileNotEmpty(condition, gameState);
+			case 'pileEmpty': 
+				return this.checkPileEmpty(condition, gameState);
+			case 'pileCardCount':
+				return this.checkPileCardCount(condition, gameState);
+			case 'custom':
+				return this.evaluateCustomBlockingCondition(condition, gameState, targetPile);
+			default:
+				console.warn('Unknown blocking condition type:', condition.type);
+				return false;
+		}
+	}
+
+	// Check if specified piles are not empty (blocking condition)
+	checkPileNotEmpty(condition, gameState) {
+		const piles = gameState.piles.filter(p => p.type === condition.pileType);
+		if (condition.pileIndex !== undefined) {
+			const specificPile = piles.find(p => p.index === condition.pileIndex);
+			return specificPile ? !specificPile.isEmpty() : false;
+		}
+		// Check if ANY of the piles are not empty
+		return piles.some(pile => !pile.isEmpty());
+	}
+
+	// Check if specified piles are empty (blocking condition)
+	checkPileEmpty(condition, gameState) {
+		const piles = gameState.piles.filter(p => p.type === condition.pileType);
+		if (condition.pileIndex !== undefined) {
+			const specificPile = piles.find(p => p.index === condition.pileIndex);
+			return specificPile ? specificPile.isEmpty() : true;
+		}
+		// Check if ALL of the piles are empty
+		return piles.every(pile => pile.isEmpty());
+	}
+
+	// Check pile card count conditions
+	checkPileCardCount(condition, gameState) {
+		const piles = gameState.piles.filter(p => p.type === condition.pileType);
+		if (condition.pileIndex !== undefined) {
+			const specificPile = piles.find(p => p.index === condition.pileIndex);
+			if (!specificPile) return false;
+			return this.compareCardCount(specificPile.cards.length, condition.operator, condition.count);
+		}
+		// Check against all piles of this type
+		return piles.some(pile => this.compareCardCount(pile.cards.length, condition.operator, condition.count));
+	}
+
+	// Helper to compare card counts with operators
+	compareCardCount(actualCount, operator, expectedCount) {
+		switch (operator) {
+			case '=':
+			case '==':
+				return actualCount === expectedCount;
+			case '!=':
+			case '<>':
+				return actualCount !== expectedCount;
+			case '<':
+				return actualCount < expectedCount;
+			case '<=':
+				return actualCount <= expectedCount;
+			case '>':
+				return actualCount > expectedCount;
+			case '>=':
+				return actualCount >= expectedCount;
+			default:
+				console.warn('Unknown operator:', operator);
+				return false;
+		}
+	}
+
+	// Custom blocking condition evaluation (override in subclasses)
+	evaluateCustomBlockingCondition(condition, gameState, targetPile = null) {
+		// Override in subclasses for game-specific blocking logic
+		return false;
+	}
+
+	// UI Helper: Get blocking status and description for display
+	getBlockingStatusForPile(pile, gameState) {
+		if (!this.isPileTypeBlocked(pile.type, gameState, pile)) {
+			return { isBlocked: false, description: null, icon: null };
+		}
+
+		// Find the active blocking condition to get its description
+		const blockingConditions = this.getBlockingConditions();
+		const conditions = blockingConditions[pile.type] || [];
+		
+		for (const condition of conditions) {
+			if (this.evaluateBlockingCondition(condition, gameState, pile)) {
+				return {
+					isBlocked: true,
+					description: condition.description || 'This pile is blocked',
+					icon: condition.icon || '🔒',
+					condition: condition
+				};
+			}
+		}
+
+		return { isBlocked: true, description: 'This pile is blocked', icon: '🔒' };
+	}
+
+	// UI Helper: Check if any piles of a given type should show blocking overlays
+	shouldShowBlockingOverlay(pileType, gameState) {
+		const blockingConditions = this.getBlockingConditions();
+		return blockingConditions[pileType] && blockingConditions[pileType].length > 0;
+	}
+
+	// UI Helper: Get all piles that are currently blocked of a given type
+	getBlockedPiles(pileType, gameState) {
+		const pilesOfType = gameState.piles.filter(p => p.type === pileType);
+		return pilesOfType.filter(pile => this.isPileTypeBlocked(pileType, gameState, pile));
+	}
+
+	// Abstract method: Check if a card can be moved from its current pile
+	canCardBeMovedFromPile(card, sourcePile, gameState) {
+		throw new Error('canCardBeMovedFromPile must be implemented by subclass');
+	}
+
+	// Check if a stack of cards can be moved together (abstract - must be implemented by subclass)
+	canMoveStack(cards, targetPile, gameState) {
+		throw new Error('canMoveStack must be implemented by subclass');
+	}
+
 
 	// Check if the game is won
 	checkWinCondition(gameState) {
@@ -112,99 +385,6 @@ export class GameRules {
 		];
 	}
 
-	// Get the number of tableau piles for this game
-	getTableauPileCount() {
-		return this.deckConfig.getTableauPileCount();
-	}
-
-	// Get the number of foundation piles for this game
-	getFoundationPileCount() {
-		return this.deckConfig.getFoundationPileCount();
-	}
-
-	// Get the initial deal configuration
-	getInitialDeal() {
-		// Get deal pattern from configuration
-		const dealPattern = this.getDealPattern();
-		
-		// Convert deal pattern to initial deal format for backward compatibility
-		return this.convertDealPatternToInitialDeal(dealPattern);
-	}
-
-	// Get deal pattern for this game variant
-	getDealPattern() {
-		return {
-			type: 'sequential', // 'sequential', 'random', 'pattern'
-			piles: ['tableau'], // Which pile types to deal to
-			faceUp: [true],     // Face-up state for each pile type
-			distribution: 'custom', // 'custom', 'standard', 'even'
-			tableau: {
-				piles: 7,        // Number of tableau piles
-				cardsPerPile: [1, 1, 1, 1, 1, 1, 1], // Cards per pile
-				faceUp: [true, true, true, true, true, true, true] // Face-up per pile
-			},
-			foundation: {
-				piles: 4,        // Number of foundation piles
-				cardsPerPile: [0, 0, 0, 0], // Cards per pile (usually 0 initially)
-				faceUp: [false, false, false, false] // Face-up per pile
-			},
-			stock: {
-				piles: 1,        // Number of stock piles
-				cardsPerPile: [24], // Cards per pile (remaining cards)
-				faceUp: [false]  // Face-up per pile
-			},
-			waste: {
-				piles: 1,        // Number of waste piles
-				cardsPerPile: [0], // Cards per pile (usually 0 initially)
-				faceUp: [false]  // Face-up per pile
-			},
-			freecell: {
-				piles: 0,        // Number of free cell piles
-				cardsPerPile: [], // Cards per pile
-				faceUp: []       // Face-up per pile
-			}
-		};
-	}
-
-	// Convert deal pattern to initial deal format (for backward compatibility)
-	convertDealPatternToInitialDeal(dealPattern) {
-		const result = {};
-		
-		// Handle tableau dealing
-		if (dealPattern.tableau) {
-			if (dealPattern.distribution === 'custom') {
-				result.tableau = dealPattern.tableau.cardsPerPile.map((count, index) => ({
-					faceUp: dealPattern.tableau.faceUp[index] || false
-				}));
-			} else if (dealPattern.distribution === 'standard') {
-				// Standard Klondike dealing: 7 piles with 1, 1, 1, 1, 1, 1, 1 cards
-				result.tableau = Array(dealPattern.tableau.piles).fill().map((_, index) => ({
-					faceUp: dealPattern.tableau.faceUp[index] || false
-				}));
-			} else if (dealPattern.distribution === 'even') {
-				// Even distribution across all piles
-				const totalCards = this.deckConfig.deckSize;
-				const cardsPerPile = Math.floor(totalCards / dealPattern.tableau.piles);
-				result.tableau = Array(dealPattern.tableau.piles).fill().map(() => ({
-					faceUp: true
-				}));
-			}
-		}
-		
-		// Handle stock pile
-		if (dealPattern.stock) {
-			const stockCards = dealPattern.stock.cardsPerPile.reduce((sum, count) => sum + count, 0);
-			result.stockPile = stockCards;
-		}
-		
-		// Handle waste pile
-		if (dealPattern.waste) {
-			const wasteCards = dealPattern.waste.cardsPerPile.reduce((sum, count) => sum + count, 0);
-			result.wastePile = wasteCards;
-		}
-		
-		return result;
-	}
 
 	// Get game state persistence configuration
 	getGameStateConfig() {
@@ -283,10 +463,6 @@ export class GameRules {
 		return null;
 	}
 
-	// Check if a move is valid (abstract - must be implemented by subclass)
-	isValidMove(card, targetPile, gameState) {
-		throw new Error('isValidMove must be implemented by subclass');
-	}
 
 	// Get the score for a move
 	getMoveScore(card, targetPile, gameState) {
@@ -312,16 +488,9 @@ export class GameRules {
 		};
 	}
 
-	// Abstract method: Check if a card can be moved from its current pile
-	canCardBeMovedFromPile(card, sourcePile, gameState) {
-		throw new Error('canCardBeMovedFromPile must be implemented by subclass');
-	}
-	
-
-
 	// Abstract method: Get maximum possible score for this game variant
 	getMaximumScore() {
-		throw new Error('getMaximumScore must be implemented by subclass');
+		return 1000; // Can be overwritten within subclasses
 	}
 
 	// Get debug label configuration for card notation
@@ -337,69 +506,6 @@ export class GameRules {
 		return 'Base solitaire rules - implement in subclass';
 	}
 
-	// NEW: Get pile configuration for this game variant
-	getPileConfiguration() {
-		return {
-			foundation: {
-				count: this.getFoundationPileCount(),
-				create: true
-			},
-			tableau: {
-				count: this.getTableauPileCount(),
-				create: true
-			},
-			stock: {
-				count: 0, // Default: no stock pile
-				create: false
-			},
-			waste: {
-				count: 0, // Default: no waste pile
-				create: false
-			},
-			freecell: {
-				count: 0, // Default: no free cell piles
-				create: false
-			}
-		};
-	}
-
-	// NEW: Check if this game variant uses stock/waste piles
-	usesStockWaste() {
-		const dealConfig = this.getInitialDeal();
-		return dealConfig.stockPile > 0;
-	}
-
-	// NEW: Get stock drawing rules
-	getStockDrawingRules() {
-		return {
-			cardsPerDraw: 1, // Default: draw 1 card at a time
-			redealWhenEmpty: true, // Default: redeal waste to stock
-			shuffleOnRedeal: true, // Default: shuffle on redeal
-			faceUpOnDraw: true, // Default: cards become face up when drawn
-			faceDownOnRedeal: true // Default: cards become face down when redealt
-		};
-	}
-
-	// NEW: Get card flipping rules
-	getCardFlippingRules() {
-		return {
-			tableau: {
-				flipOnEmpty: false, // Default: don't flip when tableau becomes empty
-				flipOnMove: true, // Default: flip top card when cards are moved
-				flipCondition: 'faceDown' // Default: flip only face-down cards
-			},
-			foundation: {
-				flipOnEmpty: false,
-				flipOnMove: false,
-				flipCondition: 'never'
-			},
-			stock: {
-				flipOnEmpty: false,
-				flipOnMove: false,
-				flipCondition: 'never'
-			}
-		};
-	}
 
 	// NEW: Get move recording configuration
 	getMoveRecordingConfig() {
@@ -427,10 +533,5 @@ export class GameRules {
 	// NEW: Execute a special game action
 	executeSpecialAction(action, gameState) {
 		throw new Error('Special actions not supported in this variant');
-	}
-
-	// Check if a stack of cards can be moved together (abstract - must be implemented by subclass)
-	canMoveStack(cards, targetPile, gameState) {
-		throw new Error('canMoveStack must be implemented by subclass');
 	}
 }
